@@ -514,11 +514,46 @@ def verify_checksums(skill_root):
     return passed, report
 
 
+def verify_manifest_signature(skill_root):
+    """Check that checksums.json matches its Ed25519 signature.
+
+    ``--verify`` compares files *against* checksums.json; this checks that
+    checksums.json is itself signed by the pinned release key, so a regenerated
+    manifest that was never re-signed is caught. Returns (passed, message).
+    """
+    import importlib.util
+    controller = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "refresh_controller.py")
+    if not os.path.isfile(controller):
+        return False, "refresh_controller.py not found; cannot verify signature"
+    spec = importlib.util.spec_from_file_location("_rf_refresh_controller", controller)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    manifest = os.path.join(skill_root, "checksums.json")
+    signature = os.path.join(skill_root, "checksums.json.sig")
+    for path in (manifest, signature):
+        if not os.path.isfile(path):
+            return False, "missing {}".format(os.path.basename(path))
+    with open(manifest, "rb") as handle:
+        manifest_raw = handle.read()
+    with open(signature, "rb") as handle:
+        signature_raw = handle.read()
+    verifier = module._trusted_ed25519()
+    if not verifier.verify(signature_raw, manifest_raw,
+                           bytes.fromhex(module.CHECKSUMS_PUBKEY_HEX)):
+        return False, "checksums.json signature does not verify against the pinned release key"
+    return True, "checksums.json signature verified"
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="repo-forensics Installation Verifier")
     parser.add_argument('--generate', action='store_true', help="Generate checksums.json (release-time)")
     parser.add_argument('--verify', action='store_true', help="Verify installation integrity")
+    parser.add_argument('--verify-signature', action='store_true',
+                        dest='verify_signature',
+                        help="Verify checksums.json is signed by the pinned release key")
     args = parser.parse_args()
 
     skill_root = get_skill_root()
@@ -526,6 +561,11 @@ def main():
     if args.generate:
         generate_checksums(skill_root)
         sys.exit(0)
+
+    if args.verify_signature:
+        passed, message = verify_manifest_signature(skill_root)
+        print("{} {}".format("[+]" if passed else "[!]", message))
+        sys.exit(0 if passed else 1)
 
     if args.verify:
         passed, report = verify_checksums(skill_root)

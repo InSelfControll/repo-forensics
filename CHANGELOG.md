@@ -2,6 +2,36 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.12.5] - 2026-07-25
+
+### Fixed — skills load in GitHub Copilot CLI (thanks @thejesh23)
+
+- `argument-hint` in the forensify SKILL.md frontmatter was written with bare
+  brackets, which YAML reads as flow sequences rather than a string. Two of them
+  on one line is a parse error, so stricter loaders (GitHub Copilot CLI 1.0.65
+  and newer) dropped the skill. The value is now quoted. Reported and fixed by
+  @thejesh23 (#35, #36).
+
+### Added — frontmatter validation in the manifest gate
+
+- `validate_manifests.py` now validates `SKILL.md` YAML frontmatter alongside
+  the plugin manifests it already checked, so this class of frontmatter error is
+  caught before release. It runs a dependency-free structural check and, with
+  PyYAML available, a full parse and type check; `--require-yaml` keeps CI at
+  full scope.
+
+### Added — release manifest signature check
+
+- `verify_install.py --verify-signature` confirms `checksums.json` is signed by
+  the pinned release key, and the Verify Checksums workflow now runs it. This
+  complements `--verify`, which checks files against the manifest.
+
+### Fixed — refreshed threat data and plugin parity
+
+- Re-signed the checksum manifest so threat-database refresh resumes.
+- Re-synced the bundled marketplace plugin, bringing it to rulepack version 3
+  (124 rules) to match the skill tree, including the Memory Heist detections.
+
 ## [2.12.1] - 2026-07-07
 
 ### Added — uv / bun / pnpm install triggers (thanks @noamloewenstern)

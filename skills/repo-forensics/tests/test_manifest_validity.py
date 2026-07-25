@@ -25,6 +25,11 @@ def errors_for(tmp_path):
 
 
 def test_real_manifests_are_valid():
+    """Every shipped manifest and SKILL.md in this repo passes the gate.
+
+    Detection behaviour itself is covered hermetically with temporary files in
+    test_frontmatter_validity.py; this test only asserts the repo is clean.
+    """
     _, violations = validate_manifests(REPO_ROOT)
     assert violations == []
 

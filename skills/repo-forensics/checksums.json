@@ -69,8 +69,8 @@
     "scripts/scan_skill_threats.py": "619e11644ce95ddf7d7db1ef1b661ddd5d21701c37c74e600922c84f0669334b",
     "scripts/scan_splitstream.py": "95f8b56fcfd6d3900af823269e9a6e8ef1c7a0d2b417bd1936bf0f0293175a6e",
     "scripts/session_scan.py": "ebd4caa11a011a22584619fc5679e380e72ebb59657eb362bca6a1c889251c19",
-    "scripts/validate_manifests.py": "34dc9d2852943971c5cdafa867c1ca65b5bd6d0100b7666c46b75070eba1769a",
-    "scripts/verify_install.py": "860d2004b0143729d741a23bdafae9b4f674b9ceb89b5e7f23e2fb904b1200f6",
+    "scripts/validate_manifests.py": "c1f4fc7e7d18c01d7b13035aef11737ddfeaebee23a0557bfaa9e6588785a3dc",
+    "scripts/verify_install.py": "82fe0bddd8adead31c264f5c80b27693342a73e0b2a2afddaf195faaf4cfbe17",
     "scripts/vuln_feed.py": "0b56e20969beb8fbc59650114a34ac8743d1a0862ff3ae56b07e92d2e368a141"
   },
   "repo_symlinks": {
@@ -90,9 +90,9 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "7e3a928770a43382ee683352a53c378fa6b1641a8f58933bf766b3e7c374b093",
-    ".claude-plugin/plugin.json": "f3d6b8734d6f21100c71979d016327c37b040357d1aafe9ba57a0e5fdf2fa5a0",
-    ".codex-plugin/plugin.json": "ca3e5c91bacd015facea251a1fd036dc118f22343471394b12d93293a2e5f7cc"
+    ".claude-plugin/marketplace.json": "32e29e3553da0198f78fbfe1a7a8a08e054221f0c6a80b82773d2a3faab03ff3",
+    ".claude-plugin/plugin.json": "7ce060448036776e8853d27b127c19ce589b82ae1291ce305c5121c15c71fefa",
+    ".codex-plugin/plugin.json": "762b3754ca2d1646f7d311ad4d2b768ff64d3fb10849733933570ba807adf7e9"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

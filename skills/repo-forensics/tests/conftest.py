@@ -11,6 +11,9 @@ import pytest
 # Add scripts dir to path so scanners can be imported
 SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts')
 sys.path.insert(0, SCRIPTS_DIR)
+# Also add the scripts parent so `from scripts import <module>` works
+# regardless of the directory pytest is invoked from.
+sys.path.insert(0, os.path.dirname(SCRIPTS_DIR))
 
 
 @pytest.fixture
