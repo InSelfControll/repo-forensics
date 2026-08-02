@@ -883,8 +883,14 @@ def status() -> dict:
         _scheduler_status(active) if payload_healthy else (False, "payload invalid")
     )
     feeds = refresh.get("feeds", {})
+    # Only security-critical feeds (IOC/KEV) gate health. Feeds tagged
+    # critical=False (e.g. advisory rulepack-bundle freshness) may be stale
+    # without wedging refresh into a perpetual "degraded" state. Missing flag
+    # defaults to critical=True for backward compatibility with older state.
     feeds_healthy = bool(feeds) and all(
-        isinstance(value, dict) and value.get("ok") for value in feeds.values()
+        isinstance(value, dict) for value in feeds.values()
+    ) and all(
+        value.get("ok") for value in feeds.values() if value.get("critical", True)
     )
     refresh_healthy = bool(refresh.get("status") == "healthy" and feeds_healthy
                            and success_age is not None

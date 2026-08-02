@@ -403,31 +403,38 @@ def _worker_main():
                          last_error="disabled during refresh")
             return
         previous_feeds = _load_state().get("feeds") or {}
-        def feed_state(name, ok):
+        def feed_state(name, ok, critical=True):
             previous = previous_feeds.get(name) if isinstance(previous_feeds, dict) else {}
             prior_success = previous.get("last_success") if isinstance(previous, dict) else None
-            return {"ok": ok, "last_attempt": finished,
+            return {"ok": ok, "critical": critical, "last_attempt": finished,
                     "last_success": finished if ok else prior_success}
+        # IOC and KEV are the security-critical threat feeds. The rulepack BUNDLE
+        # is advisory freshness: a stale bundle (e.g. >30d) is a WARNING, not a
+        # failure, and must not block the success marker or wedge the whole
+        # refresh into a perpetual "degraded" state (refresh-degraded fix).
         feeds = {
-            "ioc": feed_state("ioc", ok_ioc),
-            "kev": feed_state("kev", ok_kev),
-            "rulepacks": feed_state("rulepacks", ok_rulepacks),
+            "ioc": feed_state("ioc", ok_ioc, critical=True),
+            "kev": feed_state("kev", ok_kev, critical=True),
+            "rulepacks": feed_state("rulepacks", ok_rulepacks, critical=False),
         }
-        if ok_ioc and ok_kev and ok_rulepacks:
+        critical_ok = ok_ioc and ok_kev
+        advisory_failed = [n for n, r in feeds.items() if not r["ok"] and not r["critical"]]
+        if critical_ok:
             marker_ok = _write_marker(forensics_core=forensics_core)
+            warn = ("advisory feed(s) stale: " + ", ".join(advisory_failed)) if advisory_failed else None
             _write_state(status="healthy" if marker_ok else "degraded",
                          last_success=finished if marker_ok else _load_state().get("last_success"),
                          last_attempt=started, duration_ms=int((finished - started) * 1000),
                          feeds=feeds, marker_written=marker_ok,
                          run_id=run_id,
-                         last_error=None if marker_ok else "success marker write failed")
+                         last_error=(warn if marker_ok else "success marker write failed"))
         else:
-            _log("refresh incomplete — success marker not updated")
-            failed = [name for name, result in feeds.items() if not result["ok"]]
+            _log("refresh incomplete — success marker not updated (critical feed failed)")
+            failed = [name for name, result in feeds.items() if not result["ok"] and result["critical"]]
             _write_state(status="degraded", last_attempt=started,
                          duration_ms=int((finished - started) * 1000), feeds=feeds,
                          marker_written=False, run_id=run_id,
-                         last_error="failed feeds: " + ", ".join(failed))
+                         last_error="failed critical feeds: " + ", ".join(failed))
         _log(f"refresh done (ioc={ok_ioc}, kev={ok_kev}, rulepacks={ok_rulepacks})")
     finally:
         if _alarm_armed:
