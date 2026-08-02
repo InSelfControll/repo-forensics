@@ -285,8 +285,128 @@ def detect_conditional_install(file_path, rel_path):
     return findings
 
 
+# Common dist-name <-> import-name aliases. Some packages ship under a
+# different name than their import module (e.g. `import yaml` is provided by
+# the `pyyaml` distribution; `import cv2` by `opencv-python`). When the
+# *distribution* name is declared in the manifest we should not flag the
+# import as a phantom dependency. Star patterns (e.g. "google-*") match
+# against any distribution starting with the literal prefix.
+DIST_ALIASES = {
+    "yaml": "pyyaml",
+    "cv2": "opencv-python",
+    "pil": "pillow",
+    "skimage": "scikit-image",
+    "sklearn": "scikit-learn",
+    "bs4": "beautifulsoup4",
+    "dateutil": "python-dateutil",
+    "dotenv": "python-dotenv",
+    "attr": "attrs",
+    "gi": "pygobject",
+    "Crypto": "pycryptodome",
+    "OpenSSL": "pyopenssl",
+    "gi.repository": "pygobject",
+    "google": "google-*",
+    "flask_sqlalchemy": "flask-sqlalchemy",
+    "flask_login": "flask-login",
+    "flask_wtf": "flask-wtf",
+    "flask_restful": "flask-restful",
+    "jwt": "pyjwt",
+    "MySQLdb": "mysqlclient",
+    "pandas": "pandas",
+    "numpy": "numpy",
+    "serial": "pyserial",
+    "wx": "wxpython",
+}
+
+
+def _alias_distribution_resolved(import_name, py_declared):
+    """Return True if an import that looks like a phantom dependency is in
+    fact covered by a declared distribution via a known alias map (e.g.
+    `import yaml` is satisfied by `PyYAML` in requirements). Case-insensitive.
+    """
+    alias = DIST_ALIASES.get(import_name)
+    if alias is None:
+        return False
+    if alias.endswith("-*"):
+        prefix = alias[:-2].lower()
+        return any(name.lower().startswith(prefix) for name in py_declared)
+    return alias.lower() in py_declared
+
+
+def _collect_local_module_roots(repo_path):
+    """Return a set of top-level module names that resolve to project-local
+    code and therefore must NOT be flagged as phantom dependencies.
+
+    Rules (Issue #38):
+      - any top-level directory (no '__init__.py' required since we cannot
+        safely assume the user keeps it; we test on import name presence)
+        - any top-level '<name>.py' file
+      - the project's own distribution name from pyproject.toml / setup.py
+    """
+    locals_ = set()
+    try:
+        with os.scandir(repo_path) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False) and not entry.is_file(follow_symlinks=False):
+                    continue
+                name = entry.name
+                if name.startswith('.') or name.startswith('_'):
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    # A directory may be a Python package if it has __init__.py
+                    # immediately inside, otherwise the import may still be a
+                    # local module via namespace packages. Be conservative:
+                    # include the directory name when __init__.py is present;
+                    # also include sub-directory names so nested packages
+                    # resolve (e.g. "mypkg" under src/).
+                    locals_.add(name.lower())
+                else:
+                    base, ext = os.path.splitext(name)
+                    if ext == '.py':
+                        locals_.add(base.lower())
+    except (OSError, PermissionError):
+        pass
+
+    # Project's own distribution name (pyproject.toml or setup.py)
+    pyproject_path = os.path.join(repo_path, 'pyproject.toml')
+    if os.path.exists(pyproject_path):
+        try:
+            with open(pyproject_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            m = re.search(r'(?im)^\s*name\s*=\s*["\']([^"\']+)["\']', content)
+            if m:
+                locals_.add(m.group(1).strip().lower().replace('-', '_'))
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    setup_path = os.path.join(repo_path, 'setup.py')
+    if os.path.exists(setup_path):
+        try:
+            with open(setup_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            m = re.search(r'(?im)^\s*name\s*=\s*["\']([^"\']+)["\']', content)
+            if m:
+                locals_.add(m.group(1).strip().lower().replace('-', '_'))
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    return locals_
+
+
 def scan_manifest_drift(repo_path):
-    """Compare declared vs actual dependencies. Return findings."""
+    """Compare declared vs actual dependencies. Return findings.
+
+    Issue #38 changes:
+      - Imports carry PROVENANCE: each module maps to the list of importer
+        rel_paths that brought it in, so we can emit one finding per phantom
+        pkg with the real importer location (not a synthetic
+        "(multiple files)" aggregate).
+      - Local first-party modules (top-level dirs/<name>.py and the project's
+        own distribution name) are excluded from "phantom" before they can
+        pollute the count.
+      - Common dist-name aliases (`import yaml` => `pyyaml`, etc.) are
+        suppressed when the mapped distribution is declared.
+    """
     findings = []
 
     # Collect declared deps
@@ -300,49 +420,79 @@ def scan_manifest_drift(repo_path):
     )
     has_js_manifest = bool(js_declared) or os.path.exists(os.path.join(repo_path, 'package.json'))
 
-    # Collect actual imports
-    py_imported = set()
-    js_imported = set()
+    # Local-first-party module roots that must NOT be flagged as phantom.
+    local_roots = _collect_local_module_roots(repo_path)
+
+    # Collect actual imports WITH provenance (module name -> list of importers).
+    py_imported = {}     # type: dict[str, list[str]]
+    js_imported = {}     # type: dict[str, list[str]]
 
     ignore_patterns = core.load_ignore_patterns(repo_path)
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True):
         ext = os.path.splitext(file_path)[1].lower()
         if ext == '.py':
-            py_imported.update(extract_python_imports(file_path))
+            for mod in extract_python_imports(file_path):
+                py_imported.setdefault(mod, []).append(rel_path)
         elif ext in ('.js', '.ts', '.mjs', '.cjs', '.jsx', '.tsx'):
-            js_imported.update(extract_js_imports(file_path))
+            for mod in extract_js_imports(file_path):
+                js_imported.setdefault(mod, []).append(rel_path)
+
+    py_imported_set = set(py_imported.keys())
+    js_imported_set = set(js_imported.keys())
 
     # Python: phantom deps (imported but not declared)
     if has_py_manifest:
-        py_phantom = py_imported - py_declared - PYTHON_STDLIB
+        py_phantom = py_imported_set - py_declared - PYTHON_STDLIB
         # Filter out relative/local imports (single underscore prefix is okay)
         py_phantom = {p for p in py_phantom if not p.startswith('_') and len(p) > 1}
+        # Filter out local first-party modules
+        py_phantom = {p for p in py_phantom if p not in local_roots}
+        # Filter out alias-resolved modules (declared under a different dist name)
+        py_phantom = {p for p in py_phantom if not _alias_distribution_resolved(p, py_declared)}
         for pkg in sorted(py_phantom):
+            importers = py_imported.get(pkg, [])
+            first_importer = importers[0] if importers else "<unknown>"
+            importer_count = len(importers)
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",
                 title=f"Phantom Dependency: {pkg}",
-                description=f"Module '{pkg}' is imported in code but not declared in requirements/pyproject. Could be a shadow dependency.",
-                file="(multiple files)", line=0,
+                description=(
+                    f"Module '{pkg}' is imported in code but not declared in "
+                    f"requirements/pyproject. Could be a shadow dependency. "
+                    f"Imported from {importer_count} location"
+                    f"{'s' if importer_count != 1 else ''}; first seen in "
+                    f"{first_importer}."
+                ),
+                file=first_importer, line=0,
                 snippet=f"import {pkg} (not in manifest)",
                 category="phantom-dependency"
             ))
 
     # JavaScript: phantom deps (imported but not declared)
     if has_js_manifest:
-        js_phantom = js_imported - js_declared - NODE_BUILTINS
+        js_phantom = js_imported_set - js_declared - NODE_BUILTINS
         for pkg in sorted(js_phantom):
+            importers = js_imported.get(pkg, [])
+            first_importer = importers[0] if importers else "<unknown>"
+            importer_count = len(importers)
             findings.append(core.Finding(
                 scanner=SCANNER_NAME, severity="high",
                 title=f"Phantom Dependency: {pkg}",
-                description=f"Module '{pkg}' is required/imported but not in package.json. Could be a shadow dependency.",
-                file="(multiple files)", line=0,
+                description=(
+                    f"Module '{pkg}' is required/imported but not in "
+                    f"package.json. Could be a shadow dependency. Imported "
+                    f"from {importer_count} location"
+                    f"{'s' if importer_count != 1 else ''}; first seen in "
+                    f"{first_importer}."
+                ),
+                file=first_importer, line=0,
                 snippet=f"require('{pkg}') / import '{pkg}' (not in manifest)",
                 category="phantom-dependency"
             ))
 
     # Declared but never imported (potential confusion decoy)
-    if has_py_manifest and py_imported:
-        py_unused = py_declared - py_imported - {'setuptools', 'wheel', 'pip', 'build', 'twine', 'pytest', 'black', 'flake8', 'mypy', 'ruff', 'isort', 'pylint'}
+    if has_py_manifest and py_imported_set:
+        py_unused = py_declared - py_imported_set - {'setuptools', 'wheel', 'pip', 'build', 'twine', 'pytest', 'black', 'flake8', 'mypy', 'ruff', 'isort', 'pylint'}
         for pkg in sorted(py_unused):
             if pkg and not pkg.startswith('_'):
                 findings.append(core.Finding(

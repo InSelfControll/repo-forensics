@@ -928,7 +928,14 @@ def correlate(findings):
     # findings and broke Rule 19. Symlink-based split attacks across two
     # different relative paths are a P1 follow-up.)
     by_file = {}
+    _SYNTHETIC_FILE_TOKENS = ("", "(multiple files)")
     for f in findings:
+        # Defense in depth (Issue #38): exclude synthetic aggregates (no real
+        # importer location) from `by_file` so they cannot seed a correlation
+        # bucket that later picks up unrelated findings tied to the same fake
+        # path. Real findings always have a non-empty file path.
+        if not f.file or f.file in _SYNTHETIC_FILE_TOKENS:
+            continue
         by_file.setdefault(f.file, []).append(f)
 
     env_keywords = {"env access", "environ", "credential", "secret", ".env", ".ssh", ".aws", "keychain"}
@@ -971,6 +978,22 @@ def correlate(findings):
                     return True
         return False
 
+    def first_match(file_findings, keywords, exclude_categories=None):
+        """Return the FIRST finding whose _tags contains any of the keywords,
+        skipping findings whose `category` is in `exclude_categories` (defense
+        in depth, Issue #38: keep encoding/obfuscation findings from satisfying
+        the exec side through their own descriptive prose such as 'shellcode').
+        Returns None when nothing matches."""
+        exclude_categories = exclude_categories or set()
+        for f in file_findings:
+            if f.category in exclude_categories:
+                continue
+            tags = f._tags
+            for kw in keywords:
+                if kw in tags:
+                    return f
+        return None
+
     for filepath, file_findings in by_file.items():
         # Rule 1: env access + network call
         if has_category(file_findings, env_keywords) and has_category(file_findings, network_keywords):
@@ -985,8 +1008,16 @@ def correlate(findings):
                 category="exfiltration"
             ))
 
-        # Rule 2: base64/encoding + exec/eval
-        if has_category(file_findings, encoding_keywords) and has_category(file_findings, exec_keywords):
+        # Rule 2: encoding + a DISTINCT, structured code-execution finding.
+        # Issue #38: an entropy/obfuscation finding must not satisfy BOTH sides of
+        # this rule through its own descriptive prose (e.g. "may be shellcode").
+        # Require the two sides to come from DISTINCT findings AND the exec side
+        # to be a real, non-obfuscation finding so a single "Long Hex String"
+        # finding does not self-correlate.
+        enc_find = first_match(file_findings, encoding_keywords)
+        exec_find = first_match(file_findings, exec_keywords,
+                                exclude_categories={"encoding", "obfuscation"})
+        if enc_find is not None and exec_find is not None and exec_find is not enc_find:
             correlated.append(Finding(
                 scanner="correlation",
                 severity="critical",

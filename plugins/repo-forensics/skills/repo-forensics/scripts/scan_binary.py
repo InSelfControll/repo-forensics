@@ -199,13 +199,26 @@ def main():
 
         if os.name == 'posix':
             if os.access(filepath, os.X_OK) and ext in {'.png', '.jpg', '.txt', '.md', '.json', '.csv'}:
+                # Issue #38: by this code path the file has NO exec magic and
+                # NO shebang (those are caught earlier as CRITICAL). An exec
+                # bit alone is permission hygiene, not binary camouflage —
+                # real camouflage (ELF/PE/Mach-O + image extension) is still
+                # caught upstream as CRITICAL. Demote this single signal to
+                # LOW severity under a category that reflects intent. HIGH
+                # only when combined with executable content / shebang /
+                # magic mismatch, which are detected separately and unchanged.
                 all_findings.append(core.Finding(
-                    scanner=SCANNER_NAME, severity="high",
-                    title=f"Executable Permission on {ext}",
-                    description=f"File has extension '{ext}' but is marked executable (+x)",
+                    scanner=SCANNER_NAME, severity="low",
+                    title=f"Executable bit on data file ({ext})",
+                    description=(
+                        f"Data file ({ext}) has the executable bit set (+x). "
+                        "Permission-hygiene signal only; high-confidence "
+                        "binary camouflage is detected separately when the "
+                        "file also carries executable magic or a shebang."
+                    ),
                     file=rel_path, line=0,
                     snippet=f"chmod +x on {ext} file",
-                    category="binary-camouflage"
+                    category="permission-hygiene"
                 ))
 
         # Audio steganography check

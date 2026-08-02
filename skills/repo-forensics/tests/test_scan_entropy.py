@@ -159,3 +159,42 @@ class TestSharedBudgetBounded:
         monkeypatch.setattr("sys.argv", ["scan_entropy.py", str(tmp_path), "--format", "json"])
         scanner.main()
         assert calls["n"] == 1, "main() must mint exactly one shared budget for the scan"
+
+
+class TestIssue38HexStringDescription:
+    """Regression (Issue #38, defense-in-depth): the `Long Hex String` finding's
+    description must NOT contain the substring `shell` — keeping it source-clean
+    means a downstream correlation rule cannot accidentally satisfy its
+    code-execution side by reading the entropy finding's own prose."""
+
+    def test_long_hex_string_description_excludes_shell_substring(self, tmp_path):
+        f = tmp_path / "hx.txt"
+        # 64+ char hex string (no 0x prefix)
+        f.write_text("deadbeef" * 12 + "\n")
+        findings = scanner.scan_file(str(f), "hx.txt")
+        lex_findings = [x for x in findings if x.title == "Long Hex String"]
+        assert lex_findings, "fixture must produce at least one Long Hex String finding"
+        for fx in lex_findings:
+            assert "shell" not in fx.description.lower(), (
+                "Long Hex String description must not contain 'shell' "
+                "because that substring matches forensics_core.Rule 2 "
+                "exec_keywords and would let a single entropy finding "
+                "self-correlate. See Issue #38."
+            )
+
+    def test_long_hex_string_description_excludes_exec_keywords(self, tmp_path):
+        f = tmp_path / "hx.txt"
+        f.write_text("deadbeef" * 12 + "\n")
+        findings = scanner.scan_file(str(f), "hx.txt")
+        lex_findings = [x for x in findings if x.title == "Long Hex String"]
+        assert lex_findings
+        # Defense in depth: also assert the loose exec_keywords set cannot
+        # match the entropy finding's description.
+        EXEC_KW = {"eval", "exec", "system", "subprocess", "code execution", "shell"}
+        for fx in lex_findings:
+            tags = (fx.description + " " + fx.title + " " + fx.category).lower()
+            for kw in EXEC_KW:
+                assert kw not in tags, (
+                    "Long Hex String finding must not contain exec_keywords "
+                    f"substring {kw!r}; found in: {tags!r}"
+                )

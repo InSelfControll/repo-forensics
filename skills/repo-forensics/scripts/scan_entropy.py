@@ -141,7 +141,7 @@ def scan_file(file_path, rel_path, threshold=5.8, budget=None):
                 findings.append(core.Finding(
                     scanner=SCANNER_NAME, severity="high",
                     title="Long Hex String",
-                    description=f"Long hex string ({len(matched)} chars) may be shellcode or encoded data",
+                    description=f"Long hex string ({len(matched)} chars) may be encoded data or a packed payload",
                     file=rel_path, line=i+1,
                     snippet=matched[:120],
                     category="encoding"
