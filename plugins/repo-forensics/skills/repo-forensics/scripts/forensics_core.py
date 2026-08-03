@@ -429,6 +429,166 @@ def suppression_matches(suppression, rule_id, file_path, repo_path=None, now=Non
     return fnmatch.fnmatch(path, glob)
 
 
+# --- Capability declaration ledger ---
+
+# Mapping from declared capability names to the finding categories and
+# rule_id prefixes that indicate them. A finding matches a declared
+# capability when its category or rule_id prefix appears in the set for
+# that capability name.
+_CAPABILITY_CATEGORY_MAP = {
+    "writes-config": {
+        "config-modification", "file-write", "settings-modification",
+    },
+    "reads-home": {
+        "home-directory-access", "path-traversal",
+    },
+    "spawns-subprocess": {
+        "code-execution", "shell-injection", "process-spawn",
+        "subprocess-exec", "command-execution",
+    },
+    "network-egress": {
+        "exfiltration", "network-call", "dataflow",
+        "git-exfiltration",
+    },
+    "dynamic-import": {
+        "deserialization", "reflection-rce", "dynamic-import",
+        "obfuscation",
+    },
+}
+
+# rule_id prefixes (lowercased) that map to each capability. A finding whose
+# rule_id starts with one of these prefixes matches the capability.
+_CAPABILITY_RULE_PREFIX_MAP = {
+    "writes-config": {"sa-config-", "sa-file-write-"},
+    "reads-home": {"sa-path-", "sa-home-"},
+    "spawns-subprocess": {"sa-exec-", "sa-shell-", "sa-cmd-", "sa-subprocess-"},
+    "network-egress": {"sa-net-", "sa-exfil-", "sa-dataflow-", "df-"},
+    "dynamic-import": {"sa-deser-", "sa-reflection-", "sa-import-"},
+}
+
+# Categories that are NEVER downgradable by a capability declaration, even
+# when the category name appears in the capability map. These represent
+# findings that are always BLOCK-tier regardless of declared intent.
+_NON_DOWNGRADABLE_CATEGORIES = {
+    "prompt-injection",
+    "mcp-tool-injection",
+    "memory-heist-exfil",
+    "known-ioc",
+    "cve",
+    "cve-kev",
+}
+
+# Scanner names that emit directive-class findings. A finding from one of
+# these scanners is never downgraded by a capability declaration.
+_NON_DOWNGRADABLE_SCANNERS = {
+    "skill_threats", "agent_skills", "mcp_security",
+}
+
+
+def _capability_matches_finding(capability, finding):
+    """Return True if a finding's category or rule_id matches a declared
+    capability name."""
+    cats = _CAPABILITY_CATEGORY_MAP.get(capability, set())
+    prefixes = _CAPABILITY_RULE_PREFIX_MAP.get(capability, set())
+    fcat = (finding.get("category") or "").lower()
+    if fcat in cats:
+        return True
+    rule_id = (finding.get("rule_id") or "").lower()
+    for prefix in prefixes:
+        if rule_id.startswith(prefix):
+            return True
+    return False
+
+
+def _is_non_downgradable(finding):
+    """Return True if a finding can never be downgraded by a capability
+    declaration (directive-class, known-IOC, or CVE/KEV)."""
+    fcat = (finding.get("category") or "").lower()
+    if fcat in _NON_DOWNGRADABLE_CATEGORIES:
+        return True
+    scanner = (finding.get("scanner") or "").lower()
+    if scanner in _NON_DOWNGRADABLE_SCANNERS:
+        return True
+    return False
+
+
+def load_capability_declaration(repo_path):
+    """Load and validate a .forensics-capabilities.json or .forensics-capabilities.yml
+    file from the repo root.
+
+    Returns a dict with:
+      - "capabilities": list of {"name": str, "reason": str}
+      - "source": str (the filename that was loaded, or "")
+      - "error": str or None (parse/validation error message)
+
+    Returns empty capabilities and no error when no declaration file exists.
+    """
+    json_path = os.path.join(repo_path, ".forensics-capabilities.json")
+    yml_path = os.path.join(repo_path, ".forensics-capabilities.yml")
+    yaml_path = os.path.join(repo_path, ".forensics-capabilities.yaml")
+
+    source = ""
+    raw_data = None
+    error = None
+
+    if os.path.exists(json_path):
+        source = ".forensics-capabilities.json"
+        try:
+            with open(json_path, "r", encoding="utf-8") as fh:
+                raw_data = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            error = f"Invalid JSON in {source}: {exc}"
+    elif os.path.exists(yml_path):
+        source = ".forensics-capabilities.yml"
+        try:
+            import yaml as _yaml
+            with open(yml_path, "r", encoding="utf-8") as fh:
+                raw_data = _yaml.safe_load(fh)
+        except ImportError:
+            error = f"{source} found but PyYAML is not installed"
+        except Exception as exc:
+            error = f"Invalid YAML in {source}: {exc}"
+    elif os.path.exists(yaml_path):
+        source = ".forensics-capabilities.yaml"
+        try:
+            import yaml as _yaml
+            with open(yaml_path, "r", encoding="utf-8") as fh:
+                raw_data = _yaml.safe_load(fh)
+        except ImportError:
+            error = f"{source} found but PyYAML is not installed"
+        except Exception as exc:
+            error = f"Invalid YAML in {source}: {exc}"
+
+    if error:
+        return {"capabilities": [], "source": source, "error": error}
+
+    if raw_data is None:
+        return {"capabilities": [], "source": "", "error": None}
+
+    if not isinstance(raw_data, dict):
+        return {"capabilities": [], "source": source,
+                "error": f"{source}: top-level must be an object"}
+
+    raw_caps = raw_data.get("capabilities")
+    if not isinstance(raw_caps, list):
+        return {"capabilities": [], "source": source,
+                "error": f"{source}: 'capabilities' must be a list"}
+
+    capabilities = []
+    for entry in raw_caps:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name", "")
+        reason = entry.get("reason", "")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if not isinstance(reason, str):
+            reason = ""
+        capabilities.append({"name": name.strip(), "reason": reason.strip()})
+
+    return {"capabilities": capabilities, "source": source, "error": None}
+
+
 # Patterns that suppress too much of the walk to be plausibly legitimate.
 # An attacker-planted .forensicsignore with `*.py` or `*.js` would otherwise
 # silently suppress entire languages and escape detection. (Security review

@@ -720,6 +720,79 @@ def apply_evidence_caps(all_findings):
     return all_findings
 
 
+def apply_capability_declarations(all_findings, repo_path):
+    """Downgrade BLOCK-tier findings that match a declared capability to
+    REVIEW-tier (WARN band). The finding is still fully visible in the report,
+    annotated with the declared capability and reason. Nothing is removed or
+    silenced.
+
+    Safety constraints (enforced by forensics_core._is_non_downgradable):
+      - Directive-class findings (prompt-injection, mcp-tool-injection,
+        memory-heist-exfil) are never downgraded.
+      - known-IOC and CVE/KEV findings are never downgraded.
+      - Findings from directive scanners (skill_threats, agent_skills,
+        mcp_security) are never downgraded.
+
+    A downgrade moves the finding from BLOCK-tier (confidence >= 0.92) to
+    REVIEW-tier (confidence in the WARN band). Severity is lowered from
+    critical to high so the exit code drops from 2 to 1. The original
+    severity and confidence are preserved for auditability.
+
+    Returns (all_findings, capability_ledger) where capability_ledger is a
+    dict with the declaration source, declared capabilities, and a list of
+    applied downgrades (each with finding_id, capability, and reason).
+    """
+    try:
+        import forensics_core as core
+    except ImportError:
+        return all_findings, {"declared": False, "source": "",
+                              "capabilities": [], "downgrades": [], "error": None}
+
+    declaration = core.load_capability_declaration(repo_path)
+    ledger = {
+        "declared": len(declaration["capabilities"]) > 0,
+        "source": declaration["source"],
+        "capabilities": declaration["capabilities"],
+        "downgrades": [],
+        "error": declaration.get("error"),
+    }
+
+    if not declaration["capabilities"]:
+        return all_findings, ledger
+
+    cap_names = {c["name"] for c in declaration["capabilities"]}
+    cap_reasons = {c["name"]: c["reason"] for c in declaration["capabilities"]}
+
+    for f in all_findings:
+        if core._is_non_downgradable(f):
+            continue
+        conf = _finding_confidence(f)
+        if conf < VERDICT_BLOCK_MIN:
+            continue
+        matched_cap = None
+        for cap in cap_names:
+            if core._capability_matches_finding(cap, f):
+                matched_cap = cap
+                break
+        if matched_cap is None:
+            continue
+        f["original_severity"] = f.get("severity", "critical")
+        f["original_confidence"] = f.get("confidence", conf)
+        f["severity"] = "high"
+        f["confidence"] = _SEVERITY_CONFIDENCE["high"]
+        f["declared_capability"] = matched_cap
+        f["declared_capability_reason"] = cap_reasons.get(matched_cap, "")
+        ledger["downgrades"].append({
+            "finding_id": f.get("finding_id", ""),
+            "capability": matched_cap,
+            "reason": cap_reasons.get(matched_cap, ""),
+            "file": f.get("file", ""),
+            "rule_id": f.get("rule_id", ""),
+        })
+
+    return all_findings, ledger
+
+
 def run_correlation_pass(all_findings):
     """Run the forensics_core.correlate() engine on aggregated findings.
 
@@ -833,12 +906,22 @@ def build_report(tmpdir, repo_path, skill_scan):
     # Additive per-finding flag; does not touch severity counts or exit code.
     mark_adjudication(all_findings)
 
-    # Evidence model severity capping (Track A / P0). Inferred and structural
-    # findings cap at LOW; direct findings (including directive-class detectors
-    # like prompt-injection) are unaffected. Runs AFTER suppression and
+    # Evidence model severity capping. Inferred and structural findings cap
+    # at LOW; direct findings (including directive-class detectors like
+    # prompt-injection) are unaffected. Runs AFTER suppression and
     # adjudication marking so the cap shapes the final severity that drives
     # summary/exit-code, but BEFORE sort/summary so counts reflect the cap.
     apply_evidence_caps(all_findings)
+
+    # Capability declaration ledger. A first-party .forensics-capabilities
+    # file can downgrade BLOCK-tier findings that match a declared capability
+    # to REVIEW-tier (WARN band). Directive-class, known-IOC, and CVE/KEV
+    # findings are never downgradable. Runs AFTER evidence caps so the
+    # downgrade sees the final post-cap severity/confidence, and BEFORE
+    # sort/summary so counts reflect the downgrade.
+    all_findings, capability_ledger = apply_capability_declarations(
+        all_findings, repo_path
+    )
 
     all_findings.sort(key=lambda item: -SEVERITY_ORDER.get(item.get("severity", "low"), 0))
     summary = build_summary(all_findings)
@@ -863,6 +946,7 @@ def build_report(tmpdir, repo_path, skill_scan):
         "coverage_status": coverage_status,
         "core_verdict": core_verdict,
         "enrichment_status": enrichment_status,
+        "capability_ledger": capability_ledger,
     }
 
 
@@ -963,6 +1047,21 @@ def format_report_as_text(report):
             f"    vulns={es['vulns']} rulepack_feed={es['rulepack_feed']} "
             f"dead_anchors={es['dead_anchors']} adjudication={es['adjudication']}"
         )
+
+    capability_ledger = report.get("capability_ledger")
+    if capability_ledger and capability_ledger.get("declared"):
+        lines.append(f"  CAPABILITIES: declared ({capability_ledger.get('source', '')})")
+        for cap in capability_ledger.get("capabilities", []):
+            reason = cap.get("reason", "")
+            lines.append(f"    {cap['name']}: {reason}" if reason else f"    {cap['name']}")
+        downgrades = capability_ledger.get("downgrades", [])
+        if downgrades:
+            lines.append(f"    downgrades applied: {len(downgrades)}")
+            for dg in downgrades:
+                lines.append(
+                    f"      {dg.get('rule_id', '')} -> {dg['capability']}"
+                    f" ({dg.get('file', '')})"
+                )
 
     exit_code = report["exit_code"]
     if exit_code == 2:
