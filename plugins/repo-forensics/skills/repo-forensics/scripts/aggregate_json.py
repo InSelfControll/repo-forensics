@@ -682,6 +682,44 @@ def build_enrichment_status(scanners, all_findings):
     }
 
 
+def apply_evidence_caps(all_findings):
+    """Cap finding severity based on evidence_class (Track A / P0).
+
+    Rules:
+      - inferred:    cap at LOW  (descriptions, mentions, comments, prose)
+      - structural:  cap at LOW  (manifest drift, integrity, provenance, dead
+                                  anchors, oversize — structure anomalies only)
+      - direct:      no cap      (real code, config, agent directives)
+
+    A finding whose evidence_class is empty or unrecognised is treated as
+    direct (backward compat: legacy scanner JSON predating Track A has no
+    evidence_class key, and those findings were already severity-correct by
+    construction). This means the cap only ever LOWERS severity for findings
+    the central inferer tagged as inferred/structural — it never raises.
+
+    The original severity is preserved in an `original_severity` key (added
+    only when a cap was applied) so the report is auditable: a reader can see
+    what the scanner originally claimed and what the evidence model allowed.
+
+    Operates in-place on dict findings. Returns all_findings for chaining.
+    """
+    for f in all_findings:
+        ec = f.get("evidence_class", "")
+        if ec not in ("inferred", "structural"):
+            # direct or unknown -> no cap (backward compat).
+            continue
+        sev = f.get("severity", "low")
+        if SEVERITY_ORDER.get(sev, 0) > SEVERITY_ORDER["low"]:
+            f["original_severity"] = sev
+            f["severity"] = "low"
+            # Confidence follows severity so verdict-tier messaging stays
+            # consistent with the capped severity (KTD-7 / KTD-8).
+            conf = f.get("confidence")
+            if conf is None or float(conf) > _SEVERITY_CONFIDENCE["low"]:
+                f["confidence"] = _SEVERITY_CONFIDENCE["low"]
+    return all_findings
+
+
 def run_correlation_pass(all_findings):
     """Run the forensics_core.correlate() engine on aggregated findings.
 
@@ -794,6 +832,13 @@ def build_report(tmpdir, repo_path, skill_scan):
     # Mark WARN-tier (non-correlation) findings for LLM adjudication (U8).
     # Additive per-finding flag; does not touch severity counts or exit code.
     mark_adjudication(all_findings)
+
+    # Evidence model severity capping (Track A / P0). Inferred and structural
+    # findings cap at LOW; direct findings (including directive-class detectors
+    # like prompt-injection) are unaffected. Runs AFTER suppression and
+    # adjudication marking so the cap shapes the final severity that drives
+    # summary/exit-code, but BEFORE sort/summary so counts reflect the cap.
+    apply_evidence_caps(all_findings)
 
     all_findings.sort(key=lambda item: -SEVERITY_ORDER.get(item.get("severity", "low"), 0))
     summary = build_summary(all_findings)

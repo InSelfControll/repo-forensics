@@ -225,6 +225,7 @@ def test_update_kev_cache_rejects_truncated_catalog_without_replacing_cache(monk
 # Cache safety
 # ======================================================================
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes not enforced on Windows")
 def test_cache_file_is_mode_0600(tmp_path, monkeypatch):
     payload = json.dumps({
         "catalogVersion": "v1",

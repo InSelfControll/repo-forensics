@@ -1,6 +1,8 @@
 import os
 import stat
 
+import pytest
+
 from scripts import scan_history
 
 
@@ -40,6 +42,7 @@ def test_changed_content_is_visible_in_diff(tmp_path):
     }
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes not enforced on Windows")
 def test_database_has_private_permissions(tmp_path):
     path = tmp_path / "history.db"
     scan_history.HistoryStore(str(path)).connect().close()

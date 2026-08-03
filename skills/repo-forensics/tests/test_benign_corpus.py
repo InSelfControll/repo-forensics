@@ -277,9 +277,10 @@ def test_teeth_planted_secret(tmp_path):
     planted = tmp_path / "oauth_planted.md"
     shutil.copy(original, planted)
 
-    # AKIAIOSFODNN7EXAMPLE is the canonical AWS key used in AWS documentation.
+    # A non-placeholder AWS key ID (canonical placeholder values are suppressed
+    # by the scanner's placeholder filter).
     with open(planted, "a", encoding="utf-8") as fh:
-        fh.write("\nAWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n")
+        fh.write("\nAWS_ACCESS_KEY_ID=AKIANY4M7KQP9XJR2E3F\n")
 
     findings = _collect_findings(str(planted), "oauth_planted.md")
     relevant = [

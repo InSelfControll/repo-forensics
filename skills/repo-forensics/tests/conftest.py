@@ -53,7 +53,7 @@ def repo_with_secrets(tmp_path):
     """Repo containing hardcoded secrets."""
     config_py = tmp_path / "config.py"
     config_py.write_text(
-        "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+        "AWS_KEY = 'AKIANY4M7KQP9XJR2E3F'\n"
         "OPENAI_KEY = 'sk-proj-1234567890abcdef'\n"
         "STRIPE_KEY = 'sk_live_abcdef1234567890'\n"
         "DB_URL = 'postgresql://user:p@ssword@localhost/db'\n"
@@ -321,7 +321,7 @@ def repo_with_framework_env_leak(tmp_path):
     """Repo with framework env prefix secrets exposed to browser bundles."""
     env_file = tmp_path / ".env.local"
     env_file.write_text(
-        "NEXT_PUBLIC_SECRET_KEY='sk-live-abc123def456ghi789jkl012'\n"
+        "NEXT_PUBLIC_SECRET_KEY='prod-secret-key-abc123def456'\n"
         "REACT_APP_API_SECRET='supersecretapikey12345678'\n"
         "VITE_AUTH_TOKEN='vt_live_abcdefghijklmnop'\n"
         "EXPO_PUBLIC_PRIVATE_KEY='expo_pk_1234567890abcdef'\n"

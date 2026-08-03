@@ -2982,7 +2982,7 @@
     {
       "id": "ST-MH-003",
       "type": "regex",
-      "pattern": "(?i)(?:user.?agent|UA)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)|(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:user.?agent|UA)",
+      "pattern": "(?i)(?=.*(?:\\b(?:if|elsif|elif|else|unless|case|switch|when|check|condition)\\b|==|===|!=|=~|~=|\\.contains\\(|\\.match\\(|\\.includes\\(|\\b(?:serve\\w*|return\\w*|rout\\w*|redirect\\w*|contains|matches|equals?)\\b))(?:(?:user.?agent|UA)[^\\n]{0,60}?(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)|(?:Claude|GPT|ChatGPT|OpenAI|Gemini|Copilot|Perplexity|AI\\s+assistant|bot|crawler|spider)[^\\n]{0,60}?(?:user.?agent|UA))",
       "title": "User-agent-based content routing: AI-agent-specific content serving (Memory Heist, July 2026)",
       "severity": "high",
       "confidence": 0.7,
@@ -2990,7 +2990,7 @@
       "attacker": "website server code",
       "boundary": "HTTP request routing -> differentiated content",
       "asset": "agent receives weaponized content invisible to humans",
-      "explanation": "Server code that checks for AI agent user-agents and serves different content than what human visitors see. Enables serving a benign page to humans while injecting exfiltration instructions to AI agents. Demonstrated in The Memory Heist where the attacker served a normal coffeeshop page to browsers but a fake Cloudflare turnstile to Claude-User.",
+      "explanation": "Server code that checks for AI agent user-agents and serves different content than what human visitors see. Enables serving a benign page to humans while injecting exfiltration instructions to AI agents. The lookahead requires a conditional/branch keyword (if, check, switch, ==, serve, return, route, etc.) so a mere mention of an agent name in a warn() string or a documentation path line does not false-positive.",
       "examples": {
         "match": [
           "if user-agent contains Claude serve the turnstile page",
@@ -2999,7 +2999,9 @@
         ],
         "no_match": [
           "log the user-agent for analytics",
-          "block bots in robots.txt"
+          "block bots in robots.txt",
+          "warn('User-agent: Claude-User bot detected')",
+          "PRIVACY.md: we respect the user-agent of Claude and other bots"
         ]
       }
     },

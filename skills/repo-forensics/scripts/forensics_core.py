@@ -43,6 +43,92 @@ SEVERITY_CONFIDENCE = {
 }
 
 
+# --- Evidence Model (Track A / P0) ---
+# Every Finding carries an `evidence_class` in {direct, structural, inferred}
+# that records HOW the finding was established. The aggregation/report layer
+# uses it to cap severity: descriptions/mentions/comments (inferred) and pure
+# structural anomalies (structural) cannot exceed LOW; HIGH/CRITICAL requires
+# direct evidence. This keeps a malicious DIRECTIVE in a SKILL.md CRITICAL
+# (directive detectors set `direct`) while a README that merely DESCRIBES a
+# dangerous pattern is demoted to LOW (no false negatives on real directives,
+# no false positives on prose).
+EVIDENCE_CLASSES = ("direct", "structural", "inferred")
+
+# Directive-class detectors (spec): the four named directive families set
+# evidence_class=direct themselves. instruction-override is the prompt-injection
+# category (ST-PI-001 "Instruction override directive"); skill-poisoning is the
+# mcp-tool-injection category (ST-PI-014..016 tool/skill metadata poisoning);
+# memory-heist is the memory-heist-exfil category. A finding from any of these
+# is a real directive addressed at an agent, not a description, so it stays
+# eligible for HIGH/CRITICAL.
+DIRECTIVE_CATEGORIES = {
+    "prompt-injection",      # prompt-injection / instruction-override
+    "mcp-tool-injection",    # skill-poisoning
+    "memory-heist-exfil",    # memory-heist
+}
+
+# Scanners whose output is, by construction, an agent-directed directive or
+# instruction (not prose). Used by the central inference so imperative
+# categories that live outside the four named ones (update-channel,
+# sub-agent-spawn, prose-imperative, credential-path-directive, ...) stay
+# `direct` when emitted from a directive scanner -- a malicious update-channel
+# directive in a SKILL.md must NOT be demoted to LOW.
+DIRECTIVE_SCANNERS = {"skill_threats", "agent_skills", "mcp_security"}
+
+# Scanners that detect repo STRUCTURE / metadata anomalies rather than direct
+# malicious content (manifest drift, integrity drift, provenance gaps, dead
+# anchors, oversize). Their findings are `structural` and cap at LOW in the
+# report layer unless corroborated by a direct leaf.
+STRUCTURAL_SCANNERS = {
+    "manifest_drift", "integrity", "provenance", "dead_anchors", "oversize",
+}
+
+# Documentation extensions: a finding from a non-directive scanner that fires
+# inside one of these is reading prose (a description / mention), not an active
+# directive or executable code, so it is `inferred` and caps at LOW.
+_MARKDOWN_DOC_EXTS = {".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".asciidoc"}
+
+# Comment-line prefixes used to recognise comment context in CODE files. Note
+# `#` is intentionally excluded from the markdown path (it is a heading there),
+# so comment inference only applies when the file is not a markdown doc.
+_CODE_COMMENT_PREFIXES = ("#", "//", ";;", "/*", "*", "--", ";")
+
+
+def infer_evidence_class(scanner, category, file_path, snippet):
+    """Centrally infer an evidence_class from scanner / category / file type /
+    comment context. This is the single place evidence_class is derived, so the
+    20 scanners never need to hand-tag it.
+
+    Precedence (first match wins):
+      1. directive category  -> direct   (the four named directive detectors)
+      2. directive scanner    -> direct   (any agent-directive scanner output)
+      3. structural scanner   -> structural
+      4. comment context in a code file -> inferred
+      5. markdown/doc file from a non-directive scanner -> inferred (prose)
+      6. otherwise            -> direct   (real code / config evidence)
+
+    A scanner that wants to override this can simply pass evidence_class=
+    explicitly at construction; __post_init__ only infers when it is empty.
+    """
+    cat = (category or "").lower()
+    if cat in DIRECTIVE_CATEGORIES:
+        return "direct"
+    if (scanner or "") in DIRECTIVE_SCANNERS:
+        return "direct"
+    if (scanner or "") in STRUCTURAL_SCANNERS:
+        return "structural"
+    ext = os.path.splitext(file_path or "")[1].lower()
+    is_doc = ext in _MARKDOWN_DOC_EXTS
+    snip = (snippet or "").lstrip()
+    if not is_doc and snip.startswith(_CODE_COMMENT_PREFIXES):
+        return "inferred"
+    if is_doc:
+        # A non-directive scanner firing inside documentation is reading a
+        # description / mention, not an active directive.
+        return "inferred"
+    return "direct"
+
+
 @dataclass
 class Finding:
     scanner: str       # "secrets", "sast", "skill_threats", etc.
@@ -59,6 +145,8 @@ class Finding:
     boundary: str = ""     # Threat-model precondition: trust boundary crossed
     asset: str = ""        # Threat-model precondition: asset at risk
     freshness_status: str = ""  # Evidence freshness signal (STALE/RECHECK_REQUIRED)
+    evidence_class: str = ""    # direct | structural | inferred (Track A); "" -> infer centrally
+    finding_id: str = ""        # Stable short id; computed in __post_init__
 
     def __post_init__(self):
         # Defensive type coercion at the trust boundary between the in-process
@@ -108,6 +196,24 @@ class Finding:
                 conf = 1.0
             self.confidence = conf
         self._tags = (self.description + " " + self.title + " " + self.category).lower()
+
+        # Evidence model (Track A / P0). Infer centrally when a scanner did not
+        # set evidence_class explicitly. An invalid value (typo / legacy data)
+        # is re-derived so downstream capping never silently no-ops on a bad
+        # class string.
+        if not isinstance(self.evidence_class, str) or self.evidence_class not in EVIDENCE_CLASSES:
+            self.evidence_class = infer_evidence_class(
+                self.scanner, self.category, self.file, self.snippet
+            )
+        # Stable short finding_id from (rule_id or title) + scanner + file +
+        # snippet[:80]. SHA-1 truncated to 12 hex chars: stable across runs for
+        # the same evidence, distinct across different evidence, and compact
+        # enough to use as a correlation distinctness key without leaking full
+        # content. rule_id is preferred (pack-stable) so the same rule firing
+        # on the same locus is idempotent across scanner versions.
+        ident = self.rule_id or self.title
+        fingerprint = "\x1f".join((ident, self.scanner, self.file, self.snippet[:80]))
+        self.finding_id = hashlib.sha1(fingerprint.encode("utf-8", "replace")).hexdigest()[:12]
 
     def to_dict(self):
         return asdict(self)
@@ -361,7 +467,7 @@ def should_ignore(file_path, repo_root, patterns):
 
 # --- Common Constants ---
 
-IGNORE_DIRS = {'.git', 'node_modules', 'venv', '.venv', '__pycache__', 'dist', 'build', 'coverage', '.tox', '.mypy_cache'}
+IGNORE_DIRS = {'.git', 'node_modules', 'venv', '.venv', '__pycache__', 'dist', 'build', 'coverage', '.tox', '.mypy_cache', '.pytest_cache', '.ruff_cache'}
 BINARY_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.tar', '.gz', '.7z',
                      '.exe', '.dll', '.so', '.dylib', '.bin', '.pyc', '.class', '.woff', '.woff2',
                      '.ttf', '.eot', '.mp3', '.mp4', '.mov', '.avi', '.bmp', '.tiff'}
@@ -905,6 +1011,7 @@ def findings_from_dicts_iter(dicts):
                 boundary=d.get("boundary", ""),
                 asset=d.get("asset", ""),
                 freshness_status=d.get("freshness_status", ""),
+                evidence_class=d.get("evidence_class", ""),
             )
         except (TypeError, ValueError):
             continue
@@ -993,6 +1100,20 @@ def correlate(findings):
                 if kw in tags:
                     return f
         return None
+
+    def strongest_evidence(findings_iter):
+        """Reduce a set of contributing (leaf) findings to the strongest
+        evidence_class among them: direct > structural > inferred. An
+        escalating correlation edge needs at least one direct leaf to stay
+        above LOW in the report layer; inferred/structural leaves alone cap
+        at LOW. Empty input -> inferred (safest, caps at LOW)."""
+        classes = {getattr(f, "evidence_class", "inferred") for f in findings_iter}
+        if "direct" in classes:
+            return "direct"
+        if "structural" in classes:
+            return "structural"
+        return "inferred"
+
 
     for filepath, file_findings in by_file.items():
         # Rule 1: env access + network call
@@ -1711,7 +1832,33 @@ def correlate(findings):
             category="deferred-sub-agent-chain"
         ))
 
-    return correlated
+    # Evidence model (Track A): set each compound's evidence_class from its
+    # contributing leaves. Per-file compounds derive from that file's findings
+    # (strongest wins); repo-wide compounds (file="") default to direct since
+    # the dir-based Rules 30-36 fire on directive-class categories that come
+    # from directive scanners (skill_threats/agent_skills), which are direct.
+    # A compound built only from inferred/structural leaves caps at LOW in the
+    # report layer (apply_evidence_caps); a compound with at least one direct
+    # leaf stays eligible for HIGH/CRITICAL.
+    for c in correlated:
+        if c.file and c.file in by_file:
+            c.evidence_class = strongest_evidence(by_file[c.file])
+        elif not c.file:
+            c.evidence_class = "direct"
+        else:
+            c.evidence_class = strongest_evidence([])
+
+    # Distinctness by finding_id: two rules that fire on the same evidence
+    # locus (same title+scanner+file+snippet) produce the same stable
+    # finding_id; keep the first occurrence. Rules are ordered most-specific
+    # first, so the first match is the intended one.
+    seen_ids = set()
+    distinct = []
+    for c in correlated:
+        if c.finding_id not in seen_ids:
+            seen_ids.add(c.finding_id)
+            distinct.append(c)
+    return distinct
 
 
 # --- Output Formatting ---

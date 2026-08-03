@@ -68,6 +68,121 @@ class Test1PasswordTokens:
         findings = _scan_repo(repo_with_1password_token)
         assert any("Service Account" in f.title or "ops_" in f.snippet for f in findings)
 
+    def test_does_not_match_english_prose_after_ops_prefix(self, tmp_path):
+        """The ops_ regex must NOT fire on all-lowercase-and-underscore prose
+        that happens to start with ops_. The tightened regex requires at least
+        one digit, uppercase letter, or base64 symbol in the token body so
+        strings like 'ops_only_our_stale_entries_leaving_others_byte_identical'
+        do not false-positive."""
+        (tmp_path / "notes.py").write_text(
+            "# See ops_only_our_stale_entries_leaving_others_byte_identical\n"
+        )
+        findings = _scan_repo(tmp_path)
+        ops_findings = [f for f in findings if "Service Account" in f.title]
+        assert ops_findings == [], (
+            f"ops_ regex fired on prose; "
+            f"got {[f.snippet for f in ops_findings]}"
+        )
+
+
+class TestDocPlaceholderSuppression:
+    """Canonical placeholder values must NOT be flagged as real secrets.
+    The scanner suppresses them at the scanner layer (not the regex) so the
+    rulepack examples still document what the regex matches."""
+
+    def test_aws_example_key_not_flagged(self, tmp_path):
+        """AKIAIOSFODNN7EXAMPLE is a canonical placeholder AWS key ID."""
+        (tmp_path / "docs.md").write_text(
+            "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+            "AKIAIOSFODNN7EXAMPLE\n"
+        )
+        findings = _scan_repo(tmp_path)
+        aws_findings = [f for f in findings if "AWS Access Key" in f.title]
+        assert aws_findings == [], (
+            f"placeholder AWS key was flagged; "
+            f"got {[f.snippet for f in aws_findings]}"
+        )
+
+    def test_github_example_pat_not_flagged(self, tmp_path):
+        """ghp_0123456789abcdefghijklmnopqrstuvwxyz is a canonical placeholder
+        GitHub PAT (sequential alphabet)."""
+        (tmp_path / "docs.md").write_text(
+            "ghp_0123456789abcdefghijklmnopqrstuvwxyz\n"
+        )
+        findings = _scan_repo(tmp_path)
+        ghp_findings = [f for f in findings if "GitHub Personal Access Token" in f.title]
+        assert ghp_findings == [], (
+            f"placeholder GitHub PAT was flagged; "
+            f"got {[f.snippet for f in ghp_findings]}"
+        )
+
+    def test_example_com_db_uri_not_flagged(self, tmp_path):
+        """DB URIs with example.com hosts are placeholder values."""
+        (tmp_path / "docs.md").write_text(
+            "postgres://admin:secret@db.example.com:5432/app\n"
+            "mysql://admin:secret@db.example.com:3306/app\n"
+            "mongodb+srv://admin:secret@cluster.example.com/app\n"
+            "redis://default:secret@redis.example.com/1\n"
+        )
+        findings = _scan_repo(tmp_path)
+        db_findings = [f for f in findings
+                       if "Connection URI" in f.title or "Embedded Password" in f.title]
+        assert db_findings == [], (
+            f"example.com DB URIs were flagged; "
+            f"got {[f.snippet for f in db_findings]}"
+        )
+
+    def test_jwt_sample_not_flagged(self, tmp_path):
+        """The canonical example JWT (header+payload) is a placeholder,
+        regardless of the signature value."""
+        (tmp_path / "docs.md").write_text(
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
+            "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c\n"
+        )
+        findings = _scan_repo(tmp_path)
+        jwt_findings = [f for f in findings if "JWT" in f.title]
+        assert jwt_findings == [], (
+            f"placeholder JWT was flagged; "
+            f"got {[f.snippet for f in jwt_findings]}"
+        )
+
+    def test_sk_live_dash_not_flagged(self, tmp_path):
+        """sk-live- (with dash, not underscore) is a placeholder value.
+        Real keys use sk_live_ with underscore."""
+        (tmp_path / "docs.md").write_text(
+            "NEXT_PUBLIC_SECRET_KEY='sk-live-abc123def456ghi789jkl012'\n"
+        )
+        findings = _scan_repo(tmp_path)
+        live_findings = [f for f in findings if "NEXT_PUBLIC" in f.title]
+        assert live_findings == [], (
+            f"sk-live- placeholder was flagged; "
+            f"got {[f.snippet for f in live_findings]}"
+        )
+
+    def test_real_aws_key_still_flagged(self, tmp_path):
+        """A non-placeholder AWS key must still be flagged (no false
+        negatives from the placeholder suppression)."""
+        (tmp_path / "config.py").write_text(
+            "AWS_KEY = 'AKIANY4M7KQP9XJR2E3F'\n"
+        )
+        findings = _scan_repo(tmp_path)
+        aws_findings = [f for f in findings if "AWS Access Key" in f.title]
+        assert aws_findings, (
+            "real AWS key was NOT flagged; placeholder suppression was too aggressive"
+        )
+
+    def test_real_db_uri_still_flagged(self, tmp_path):
+        """A non-placeholder DB URI must still be flagged."""
+        (tmp_path / "config.py").write_text(
+            "DB_URL = 'postgresql://user:p@ssword@localhost/db'\n"
+        )
+        findings = _scan_repo(tmp_path)
+        db_findings = [f for f in findings if "PostgreSQL" in f.title]
+        assert db_findings, (
+            "real DB URI was NOT flagged; placeholder suppression was too aggressive"
+        )
+
 
 class TestEnvVariantFiles:
     def test_flags_committed_env_file(self, repo_with_env_files):

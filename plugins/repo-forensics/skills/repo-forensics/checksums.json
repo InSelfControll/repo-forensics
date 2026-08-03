@@ -13,9 +13,9 @@
     "data/rulepacks/mcp_security.json": "390d6c05f9ef74f1df5314981bbf81a2c82ef8d0d888e973abed209b0ef1ddf8",
     "data/rulepacks/runtime_dynamism.json": "6879c13a528b916e5d924d5b3442ebfe53f730c5c251cec627dfc058f1c5dfbc",
     "data/rulepacks/sast.json": "a9b31253a4d29fc036016b21b274a08bcf2f9a9506100d0b6764c5904a191c98",
-    "data/rulepacks/secrets.json": "a3f4de4a3bfd35fbfc18b81220e70250090b9346db099f4e7481dafb83c0d5c4",
+    "data/rulepacks/secrets.json": "f222503e53c0d0dac9006de2f1343ca54a12aa71fef86bcace218ea26b96be21",
     "data/rulepacks/shared.json": "0caddde9466b1ed1aefe6aa05d42e145de96fe7cfc27a17f7bd893698b3ebcb8",
-    "data/rulepacks/skill_threats.json": "d9d03e48681dc507ce8c4999198643f4f1a99c35e93c0561acd4a952ed0734f9",
+    "data/rulepacks/skill_threats.json": "dddcd58f14506cd029dc28b8bc38b44e66a08ebe04b167a889bd4e4b1b161e10",
     "references/mcp-attack-patterns.md": "722d7a47186bfee18bde0e06a749dc55e8cc716c2418d118a64e57d60e48689a",
     "references/research_sources.md": "b68cedd3bf08e4f526f6eed948a5b44c6e3b3a12cd1ab5f13f115490cfd8a91e",
     "references/threat_patterns.md": "ae24833171b787a7aedca7e1d1baee278ac58c84a6446c89c6cbf70bd1f5152e",
@@ -24,13 +24,13 @@
     "scripts/_shared_patterns.py": "4f4769b43be4cefcec53311faed899a96886f635cf2b3c2f78de84ee7cb53c93",
     "scripts/adjudication.py": "dfb99cc1476bc8e9b45273e2b48476d1418ba6366906acb44b2ee2d7e45e1be5",
     "scripts/adjudication_bridge.py": "fc4e2f0c9ceaf1485fe791efb960634aa8ab2d8b51efb1279711cd285cbfd9a1",
-    "scripts/aggregate_json.py": "ff7b566e8f4f084623e3d37fda7f6f4b1a7503afbe18ca367902171c21c5a0b7",
+    "scripts/aggregate_json.py": "1b543621d474d7a894c982f3d0a285657805ca3e9b4ff6b0c9839d5eee722847",
     "scripts/auto_scan.py": "13f6ce1cf42f305f9eb27e201dee051608f681c748b681607d47e17a17ff713c",
     "scripts/corpus_sync.py": "7feb0e2de6ede9ac909da8b5f8335cfd9e0181f97dc2b4b355b751e8ddb3234e",
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/dead_anchors_extract.py": "84097dd442184fc1e7339e291bc7ac47657d57a40326bd634f9b4fdfd5b97c0e",
     "scripts/dead_anchors_probe.py": "acf3cc06ba61462bcf466710a5bce88317e3519212ca27432656d785cc952d02",
-    "scripts/forensics_core.py": "3b19ec3aba117e052c8c31fd3bbb43ffff9d2019d46aac0b3b7a4f668faffafb",
+    "scripts/forensics_core.py": "44acea1ac0260641aa2e1915bfe94e62e2e847ab054479a6f53ff0881c5f304d",
     "scripts/gen_rule_ids.py": "b8430b063780e76771ecf4c29346c7b5b551e4d7fff7809904d335c6201fc337",
     "scripts/ioc_manager.py": "74bf4df219ed5bb46681603f3e58bb15957f3078f14d2f0d5ac1ae09822eb0c4",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
@@ -65,7 +65,7 @@
     "scripts/scan_provenance.py": "5305a2d2b3029b8de08855fe8d913cdae7f437becd3e002ab233a4bee670fa25",
     "scripts/scan_runtime_dynamism.py": "7e9fe4f275bc15a7419686b9891c5927267fe19fd2b32807f25d2721650218ae",
     "scripts/scan_sast.py": "c6978c8252856fce5b9623457758ee4f2990e8b8ea4958b17455f75c093b4247",
-    "scripts/scan_secrets.py": "79a454dc9acd5371d1943f3bb9fa7d1db713e169d933474d078c7cdca32ba98c",
+    "scripts/scan_secrets.py": "501fbf77f90af4ba513dbdc3d9a9582324d02983f8aca4b392573fe622c6806c",
     "scripts/scan_skill_threats.py": "619e11644ce95ddf7d7db1ef1b661ddd5d21701c37c74e600922c84f0669334b",
     "scripts/scan_splitstream.py": "95f8b56fcfd6d3900af823269e9a6e8ef1c7a0d2b417bd1936bf0f0293175a6e",
     "scripts/session_scan.py": "ebd4caa11a011a22584619fc5679e380e72ebb59657eb362bca6a1c889251c19",
@@ -94,5 +94,9 @@
     ".claude-plugin/plugin.json": "7ce060448036776e8853d27b127c19ce589b82ae1291ce305c5121c15c71fefa",
     ".codex-plugin/plugin.json": "762b3754ca2d1646f7d311ad4d2b768ff64d3fb10849733933570ba807adf7e9"
   },
-  "manifest_count": 3
+  "manifest_count": 3,
+  "repo_source_manifests": {
+    ".agents/plugins/marketplace.json": "1fb6dcd1f514fe8787cf52c0d3f8982ac509b0c1e09fe70c1a0cd1590d6fb15e"
+  },
+  "source_manifest_count": 1
 }

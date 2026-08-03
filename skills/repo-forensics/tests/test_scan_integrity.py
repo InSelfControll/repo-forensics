@@ -144,6 +144,8 @@ class TestHMACSigning:
         scanner.watch_mode(str(repo_with_hooks), files, "text")
         key_path = scanner._get_signing_key_path()
         assert os.path.exists(key_path)
+        if os.name == "nt":
+            return  # POSIX file modes not enforced on Windows
         mode = os.stat(key_path).st_mode
         assert stat.S_IMODE(mode) == 0o600
 
@@ -317,6 +319,8 @@ class TestSigningKeyOutsideRepo:
         scanner.watch_mode(str(repo), files, "text")
         key_path = scanner._get_signing_key_path()
         assert os.path.exists(key_path), "Signing key was not created"
+        if os.name == "nt":
+            return  # POSIX file modes not enforced on Windows
         mode = os.stat(key_path).st_mode
         assert stat.S_IMODE(mode) == 0o600, (
             f"Signing key has permissions {oct(stat.S_IMODE(mode))}, expected 0o600"

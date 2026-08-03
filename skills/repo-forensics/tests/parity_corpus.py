@@ -50,13 +50,13 @@ PACK_EXTS = {
 # one-liner examples. (Filename -> content.)
 FIXTURE_FILES = {
     "config_secrets.py": (
-        "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+        "AWS_KEY = 'AKIANY4M7KQP9XJR2E3F'\n"
         "OPENAI_KEY = 'sk-proj-1234567890abcdef'\n"
         "STRIPE_KEY = 'sk_live_abcdef1234567890'\n"
         "DB_URL = 'postgresql://user:p@ssword@localhost/db'\n"
     ),
     "framework_env.local": (
-        "NEXT_PUBLIC_SECRET_KEY='sk-live-abc123def456ghi789jkl012'\n"
+        "NEXT_PUBLIC_SECRET_KEY='prod-secret-key-abc123def456'\n"
         "REACT_APP_API_SECRET='supersecretapikey12345678'\n"
         "VITE_AUTH_TOKEN='vt_live_abcdefghijklmnop'\n"
         "EXPO_PUBLIC_PRIVATE_KEY='expo_pk_1234567890abcdef'\n"

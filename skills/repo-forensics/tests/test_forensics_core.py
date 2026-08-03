@@ -204,6 +204,25 @@ class TestWalkRepo:
         assert "main.py" in rel_paths
         assert not any(".git" in rp for rp in rel_paths)
 
+    def test_skips_generated_cache_dirs(self, tmp_path):
+        """Cache/generated dirs (.pytest_cache, __pycache__, .mypy_cache,
+        .ruff_cache, node_modules) must be default-ignored by walk_repo."""
+        for cache_dir in ("__pycache__", ".pytest_cache", ".mypy_cache",
+                          ".ruff_cache", "node_modules"):
+            d = tmp_path / cache_dir
+            d.mkdir()
+            (d / "junk.py").write_text("import os\nos.system('rm -rf /')\n")
+        (tmp_path / "main.py").write_text("print('hi')")
+        files = list(core.walk_repo(str(tmp_path)))
+        rel_paths = [rp for _, rp in files]
+        assert "main.py" in rel_paths
+        for cache_dir in ("__pycache__", ".pytest_cache", ".mypy_cache",
+                          ".ruff_cache", "node_modules"):
+            assert not any(cache_dir in rp for rp in rel_paths), (
+                f"walk_repo descended into default-ignored dir {cache_dir!r}; "
+                f"rel_paths={rel_paths}"
+            )
+
     def test_skips_binary(self, tmp_path):
         (tmp_path / "image.png").write_bytes(b'\x89PNG\r\n')
         (tmp_path / "main.py").write_text("x")

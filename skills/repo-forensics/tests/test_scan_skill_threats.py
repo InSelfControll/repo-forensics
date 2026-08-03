@@ -684,3 +684,55 @@ class TestCursorrulesCoverage:
         high_findings = [fi for fi in findings
                          if fi.severity in ("critical", "high")]
         assert len(high_findings) == 0
+
+
+class TestUserAgentRoutingFalsePositives:
+    """The ST-MH-003 user-agent-based content routing detector must require
+    an actual conditional/branch on an agent user-agent, not a mere mention
+    of an agent name in a warn() string or a documentation path line."""
+
+    def test_warn_string_does_not_fire(self, tmp_path):
+        """A warn() call that mentions both 'user-agent' and 'Claude'/'bot' in
+        a string literal must NOT fire the user-agent routing detector."""
+        f = tmp_path / "server.py"
+        f.write_text(
+            "def handle_request(req):\n"
+            "    warn('User-agent: Claude-User bot detected')\n"
+            "    return serve_page(req)\n"
+        )
+        findings = scanner.scan_file(str(f), "server.py")
+        ua_findings = [f for f in findings if "User-agent-based" in f.title]
+        assert ua_findings == [], (
+            f"warn() string fired user-agent routing detector; "
+            f"got {[f.snippet for f in ua_findings]}"
+        )
+
+    def test_doc_path_line_does_not_fire(self, tmp_path):
+        """A documentation line that mentions 'user-agent' and 'Claude'/'bots'
+        in a non-conditional context must NOT fire the detector."""
+        f = tmp_path / "PRIVACY.md"
+        f.write_text(
+            "# Privacy Policy\n"
+            "PRIVACY.md: we respect the user-agent of Claude and other bots.\n"
+            "We never serve different content based on the visitor.\n"
+        )
+        findings = scanner.scan_file(str(f), "PRIVACY.md")
+        ua_findings = [f for f in findings if "User-agent-based" in f.title]
+        assert ua_findings == [], (
+            f"documentation path line fired user-agent routing detector; "
+            f"got {[f.snippet for f in ua_findings]}"
+        )
+
+    def test_real_conditional_still_fires(self, tmp_path):
+        """A real conditional on an agent user-agent that serves different
+        content must STILL fire the detector (no false negatives)."""
+        f = tmp_path / "server.py"
+        f.write_text(
+            "if user-agent contains Claude serve the turnstile page\n"
+        )
+        findings = scanner.scan_file(str(f), "server.py")
+        ua_findings = [f for f in findings if "User-agent-based" in f.title]
+        assert ua_findings, (
+            "real conditional on agent user-agent did NOT fire the detector; "
+            "the tightening was too aggressive"
+        )

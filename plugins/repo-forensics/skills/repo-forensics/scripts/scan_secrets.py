@@ -18,6 +18,7 @@ Created by Alex Greenshpun
 """
 
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +32,42 @@ ENV_FILE_VARIANTS = {
     '.env.development', '.env.test', '.env.docker', '.env.container',
 }
 ENV_FILE_SAFE = {'.env.example', '.env.template', '.env.sample'}
+
+# --- Canonical documentation placeholders ---
+# Well-known example values that have no credential value. The scanner does
+# NOT flag them as real secrets. Suppression is at the scanner layer (not the
+# regex) so the rulepack examples still accurately document what the regex
+# matches.
+_DOC_PLACEHOLDER_EXACT = frozenset({
+    "AKIAIOSFODNN7EXAMPLE",  # canonical example AWS key ID
+    "ghp_0123456789abcdefghijklmnopqrstuvwxyz",  # canonical example GitHub PAT
+})
+
+# Canonical example JWT header+payload. The signature varies across copies but
+# the header.payload is always this exact base64 string.
+_JWT_IO_SAMPLE_PREFIX = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+
+# Patterns that indicate a placeholder in the matched snippet.
+# - example\.com: reserved documentation hostname in DB/connection URIs
+# - sk-test-/sk-live-: key prefix with a DASH (real keys use sk_test_ /
+#   sk_live_ with underscore); these are placeholder values
+_DOC_PLACEHOLDER_RE = re.compile(
+    r"(?:"
+    r"example\.com"
+    r"|sk-test-[a-zA-Z0-9]+"
+    r"|sk-live-[a-zA-Z0-9]+"
+    r")"
+)
+
+
+def _is_doc_placeholder(snippet):
+    """Return True if the matched snippet is a canonical placeholder
+    that must not be flagged as a real secret."""
+    if snippet in _DOC_PLACEHOLDER_EXACT:
+        return True
+    if snippet.startswith(_JWT_IO_SAMPLE_PREFIX):
+        return True
+    return bool(_DOC_PLACEHOLDER_RE.search(snippet))
 
 # Detection rules load from the shipped pack at import time (rule_loader
 # memoizes, so this parses once per process). load_pack returns None only when
@@ -100,6 +137,8 @@ def scan_file(file_path, rel_path):
                 match = rule.regex.search(line)
                 if match:
                     snippet = match.group(0)
+                    if _is_doc_placeholder(snippet):
+                        continue
                     if len(snippet) > 80:
                         snippet = snippet[:77] + "..."
 
@@ -155,6 +194,8 @@ def scan_text(text, rel_path):
             match = rule.regex.search(line)
             if match:
                 snippet = match.group(0)
+                if _is_doc_placeholder(snippet):
+                    continue
                 if len(snippet) > 80:
                     snippet = snippet[:77] + "..."
                 findings.append(core.Finding(
