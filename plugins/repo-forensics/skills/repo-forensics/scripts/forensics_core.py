@@ -67,12 +67,9 @@ DIRECTIVE_CATEGORIES = {
     "memory-heist-exfil",    # memory-heist
 }
 
-# Scanners whose output is, by construction, an agent-directed directive or
-# instruction (not prose). Used by the central inference so imperative
-# categories that live outside the four named ones (update-channel,
-# sub-agent-spawn, prose-imperative, credential-path-directive, ...) stay
-# `direct` when emitted from a directive scanner -- a malicious update-channel
-# directive in a SKILL.md must NOT be demoted to LOW.
+# Scanners whose output can include agent-directed directives. Kept for
+# reference; the central inference now uses only DIRECTIVE_CATEGORIES to
+# decide which findings bypass the documentation/comment/string checks.
 DIRECTIVE_SCANNERS = {"skill_threats", "agent_skills", "mcp_security"}
 
 # Scanners that detect repo STRUCTURE / metadata anomalies rather than direct
@@ -86,26 +83,96 @@ STRUCTURAL_SCANNERS = {
 # Documentation extensions: a finding from a non-directive scanner that fires
 # inside one of these is reading prose (a description / mention), not an active
 # directive or executable code, so it is `inferred` and caps at LOW.
-_MARKDOWN_DOC_EXTS = {".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".asciidoc"}
+_DOC_EXTS = {".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".asciidoc"}
 
-# Comment-line prefixes used to recognise comment context in CODE files. Note
-# `#` is intentionally excluded from the markdown path (it is a heading there),
-# so comment inference only applies when the file is not a markdown doc.
-_CODE_COMMENT_PREFIXES = ("#", "//", ";;", "/*", "*", "--", ";")
+# Documentation basenames (case-insensitive). A finding whose file basename
+# matches one of these is inside documentation, not executable code.
+_DOC_BASENAMES = {
+    "readme", "security", "privacy", "changelog", "license", "licence",
+    "authors", "contributors", "code_of_conduct", "contributing",
+}
+
+# Path segments that identify documentation directories.
+_DOC_PATH_SEGMENTS = {"docs", "doc", "documentation"}
+
+# Comment-line prefixes. A left-stripped snippet beginning with one of these
+# is a comment, not executable code.
+_COMMENT_PREFIXES = ("#", "//", ";;", "/*", "*", "--", ";", "<!--", "//!", "///")
+
+# Log/print/warn/echo call patterns. A snippet that starts with (or whose
+# matched portion is inside) one of these is a log/message string, not an
+# executable statement.
+_LOG_CALL_RE = re.compile(
+    r"(?:^|\s)(?:"
+    r"print\s*\(|"
+    r"warn(?:ing)?\s*\(|"
+    r"echo\b|"
+    r"console\.(?:log|warn|error|info|debug)\s*\(|"
+    r"logger\.(?:debug|info|warn|warning|error|critical|fatal)\s*\(|"
+    r"logging\.(?:debug|info|warn|warning|error|critical|fatal)\s*\(|"
+    r"log\.(?:debug|info|warn|warning|error|fatal|print)\s*\(|"
+    r"log\s*\(|"
+    r"syslog\s*\(|"
+    r"fprintf\s*\(\s*stderr|"
+    r"cout\s*<<|"
+    r"cerr\s*<<|"
+    r"System\.out\.print|"
+    r"System\.err\.print|"
+    r"NSLog\s*\(|"
+    r"puts\s*\(|"
+    r"fputs\s*\("
+    r")"
+)
+
+# Quoted-string detection: a snippet that starts with a quote character is
+# inside a string literal, not an executable statement.
+_QUOTE_CHARS = ("'", '"', '`')
+
+
+def _is_doc_file(file_path):
+    """Return True if the file path indicates a documentation file."""
+    if not file_path:
+        return False
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in _DOC_EXTS:
+        return True
+    lower = file_path.lower()
+    basename = os.path.basename(lower)
+    stem = os.path.splitext(basename)[0]
+    if stem in _DOC_BASENAMES:
+        return True
+    parts = lower.replace("\\", "/").split("/")
+    if any(seg in _DOC_PATH_SEGMENTS for seg in parts):
+        return True
+    return False
+
+
+def _is_comment_or_string(snippet):
+    """Return True if the snippet is a comment, a quoted string literal, or
+    a log/print/warn/echo message rather than an executable statement."""
+    if not snippet:
+        return False
+    snip = snippet.lstrip()
+    if snip.startswith(_COMMENT_PREFIXES):
+        return True
+    if snip.startswith(_QUOTE_CHARS):
+        return True
+    if _LOG_CALL_RE.search(snippet):
+        return True
+    return False
 
 
 def infer_evidence_class(scanner, category, file_path, snippet):
     """Centrally infer an evidence_class from scanner / category / file type /
-    comment context. This is the single place evidence_class is derived, so the
-    20 scanners never need to hand-tag it.
+    comment/string context. This is the single place evidence_class is derived,
+    so the 20 scanners never need to hand-tag it.
 
     Precedence (first match wins):
       1. directive category  -> direct   (the four named directive detectors)
-      2. directive scanner    -> direct   (any agent-directive scanner output)
-      3. structural scanner   -> structural
-      4. comment context in a code file -> inferred
-      5. markdown/doc file from a non-directive scanner -> inferred (prose)
-      6. otherwise            -> direct   (real code / config evidence)
+      2. structural scanner   -> structural
+      3. documentation file   -> inferred (prose, not executable code)
+      4. comment / quoted string / log message -> inferred
+      5. otherwise            -> direct   (real executable code evidence)
 
     A scanner that wants to override this can simply pass evidence_class=
     explicitly at construction; __post_init__ only infers when it is empty.
@@ -113,18 +180,11 @@ def infer_evidence_class(scanner, category, file_path, snippet):
     cat = (category or "").lower()
     if cat in DIRECTIVE_CATEGORIES:
         return "direct"
-    if (scanner or "") in DIRECTIVE_SCANNERS:
-        return "direct"
     if (scanner or "") in STRUCTURAL_SCANNERS:
         return "structural"
-    ext = os.path.splitext(file_path or "")[1].lower()
-    is_doc = ext in _MARKDOWN_DOC_EXTS
-    snip = (snippet or "").lstrip()
-    if not is_doc and snip.startswith(_CODE_COMMENT_PREFIXES):
+    if _is_doc_file(file_path):
         return "inferred"
-    if is_doc:
-        # A non-directive scanner firing inside documentation is reading a
-        # description / mention, not an active directive.
+    if _is_comment_or_string(snippet):
         return "inferred"
     return "direct"
 

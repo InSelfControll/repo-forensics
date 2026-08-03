@@ -30,7 +30,7 @@
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/dead_anchors_extract.py": "84097dd442184fc1e7339e291bc7ac47657d57a40326bd634f9b4fdfd5b97c0e",
     "scripts/dead_anchors_probe.py": "acf3cc06ba61462bcf466710a5bce88317e3519212ca27432656d785cc952d02",
-    "scripts/forensics_core.py": "44acea1ac0260641aa2e1915bfe94e62e2e847ab054479a6f53ff0881c5f304d",
+    "scripts/forensics_core.py": "b4e4974adc0f7dfee07cd59119e3b9cb349352682e0f1a617e33024fc3437b15",
     "scripts/gen_rule_ids.py": "b8430b063780e76771ecf4c29346c7b5b551e4d7fff7809904d335c6201fc337",
     "scripts/ioc_manager.py": "74bf4df219ed5bb46681603f3e58bb15957f3078f14d2f0d5ac1ae09822eb0c4",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
