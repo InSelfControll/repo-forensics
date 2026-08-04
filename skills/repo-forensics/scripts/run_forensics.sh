@@ -18,6 +18,7 @@ if [ -z "${1:-}" ]; then
     echo "  --format text          Human-readable with severity colors (default)"
     echo "  --format json          Machine-readable JSON"
     echo "  --format summary       Counts only (for CI/CD)"
+    echo "  --format sarif         SARIF 2.1.0 (GitHub code-scanning compatible)"
     echo "  --update-iocs          Pull latest IOC database before scanning"
     echo "  --update-vulns         Refresh CISA KEV catalog before scanning (CVE enrichment)"
     echo "  --no-vulns             Skip OSV + KEV vulnerability enrichment"
@@ -179,6 +180,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Machine-readable formats suppress the human banner/progress/echo lines.
+# json and sarif both suppress; text and summary print. Behavior for
+# text|json|summary is provably identical to the prior `!= json` guards.
+MACHINE_FORMAT=false
+{ [ "$FORMAT" = "json" ] || [ "$FORMAT" = "sarif" ]; } && MACHINE_FORMAT=true
+
 # Validate --package-list is an absolute path BEFORE passing to Python
 if [ -n "$PACKAGE_LIST_FILE" ]; then
     case "$PACKAGE_LIST_FILE" in
@@ -228,7 +235,7 @@ TMPDIR=$(mktemp -d)
 cleanup() { local _saved=$?; trap - EXIT INT TERM; set +e; jobs -p | xargs kill 2>/dev/null; wait 2>/dev/null; exec 3>&- 2>/dev/null; rm -rf "$TMPDIR"; exit "$_saved"; }
 trap cleanup EXIT INT TERM
 
-if [ "$FORMAT" != "json" ]; then
+if ! $MACHINE_FORMAT; then
     echo "=========================================="
     echo "  REPO FORENSICS v2"
     echo "  Target: $REPO_PATH"
@@ -279,7 +286,7 @@ fi
 
 # TTY autodetect for per-scanner progress lines
 PROGRESS=false
-if [ -t 2 ] && [ "$FORMAT" != "json" ]; then
+if [ -t 2 ] && ! $MACHINE_FORMAT; then
     PROGRESS=true
 fi
 
@@ -355,7 +362,7 @@ except: print(0)
 
 if $SKILL_SCAN; then
     # Focused mode: 10 scanners most relevant to vetting skills
-    if [ "$FORMAT" != "json" ]; then
+    if ! $MACHINE_FORMAT; then
         echo ""
         echo "[*] Running focused skill scan (16 scanners)..."
     fi
@@ -380,7 +387,7 @@ if $SKILL_SCAN; then
 
 else
     # Full audit: all scanners in parallel
-    if [ "$FORMAT" != "json" ]; then
+    if ! $MACHINE_FORMAT; then
         echo ""
         echo "[*] Running all 26 scanners in parallel..."
     fi
@@ -432,6 +439,10 @@ fi
 
 if [ "$FORMAT" = "json" ]; then
     if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
+        :
+    fi
+elif [ "$FORMAT" = "sarif" ]; then
+    if ! "${PYTHON[@]}" "$SKILL_DIR/aggregate_json.py" --sarif "$TMPDIR" "$REPO_PATH" "$SKILL_SCAN" "$EXIT_CODE_FILE"; then
         :
     fi
 else

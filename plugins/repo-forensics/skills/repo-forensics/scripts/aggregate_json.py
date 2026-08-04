@@ -785,7 +785,7 @@ def apply_capability_declarations(all_findings, repo_path):
     return all_findings, ledger
 
 
-def run_correlation_pass(all_findings):
+def run_correlation_pass(all_findings, repo_path=None):
     """Run the forensics_core.correlate() engine on aggregated findings.
 
     Rules 1-19 operate on cross-scanner findings in the same file (e.g.
@@ -810,7 +810,9 @@ def run_correlation_pass(all_findings):
     # Pass a lazy iterator so correlate() builds its by_file dict without
     # a separate intermediate Finding list existing alongside all_findings.
     try:
-        correlated = core.correlate(core.findings_from_dicts_iter(all_findings))
+        correlated = core.correlate(
+            core.findings_from_dicts_iter(all_findings), repo_path=repo_path
+        )
     except (AttributeError, KeyError, TypeError, ValueError) as e:
         # Narrow the except to expected types so NameError / ImportError bugs
         # in new correlation rules fail loud during development instead of
@@ -874,7 +876,7 @@ def build_report(tmpdir, repo_path, skill_scan):
     # scanner's output together. Without this, Rule 19 Lethal Trifecta
     # (exec + network + credential read) and the other 18 rules never fire
     # in the primary run_forensics.sh workflow.
-    correlated_findings = run_correlation_pass(all_findings)
+    correlated_findings = run_correlation_pass(all_findings, repo_path=repo_path)
     if correlated_findings:
         all_findings.extend(correlated_findings)
         # Add a synthetic scanner entry so the aggregate output shows
@@ -886,6 +888,14 @@ def build_report(tmpdir, repo_path, skill_scan):
             "finding_count": len(correlated_findings),
             "findings": correlated_findings,
         })
+
+    # Raw trifecta leaves exist solely to feed correlation. They must never
+    # affect user-visible findings, counts, verdicts, or scanner sections.
+    all_findings = [
+        finding for finding in all_findings
+        if finding.get("scanner") != "trifecta_raw"
+    ]
+    scanners = [scanner for scanner in scanners if scanner.get("name") != "trifecta_raw"]
 
     # Per-finding suppression (U1). User-suppressed findings are pulled out of
     # the active set BEFORE summary/exit-code computation so they cannot affect
@@ -1079,18 +1089,25 @@ def format_report_as_text(report):
 
 
 def main(argv):
-    # Support two CLI shapes:
+    # Support three CLI shapes:
     #   aggregate_json.py <tmpdir> <repo_path> <skill_scan> <exit_code_file>  [JSON output, original]
     #   aggregate_json.py --text <tmpdir> <repo_path> <skill_scan> <exit_code_file>  [text output]
+    #   aggregate_json.py --sarif <tmpdir> <repo_path> <skill_scan> <exit_code_file>  [SARIF 2.1.0 output]
     if len(argv) == 6 and argv[1] == "--text":
         text_mode = True
+        sarif_mode = False
+        _, _, tmpdir, repo_path, skill_scan, exit_code_file = argv
+    elif len(argv) == 6 and argv[1] == "--sarif":
+        text_mode = False
+        sarif_mode = True
         _, _, tmpdir, repo_path, skill_scan, exit_code_file = argv
     elif len(argv) == 5:
         text_mode = False
+        sarif_mode = False
         _, tmpdir, repo_path, skill_scan, exit_code_file = argv
     else:
         raise SystemExit(
-            "Usage: aggregate_json.py [--text] <tmpdir> <repo_path> "
+            "Usage: aggregate_json.py [--text|--sarif] <tmpdir> <repo_path> "
             "<skill_scan> <exit_code_file>"
         )
 
@@ -1107,6 +1124,11 @@ def main(argv):
 
     if text_mode:
         print(format_report_as_text(report))
+    elif sarif_mode:
+        # Lazy import so the rule_loader dependency stays out of the text/json
+        # paths (KTD-14 leaf rule: sarif_export owns the rule_loader import).
+        import sarif_export
+        print(json.dumps(sarif_export.report_to_sarif(report), indent=2))
     else:
         print(json.dumps(report, indent=2))
 

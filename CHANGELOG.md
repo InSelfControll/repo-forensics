@@ -2,6 +2,60 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.13.0] - 2026-08-04
+
+### Added — SARIF 2.1.0 output (`--format sarif`)
+
+- New `--format sarif` emits a GitHub code-scanning-compatible SARIF 2.1.0
+  document from the same aggregated report the text/json/summary paths use.
+  The converter (`scripts/sarif_export.py`) is lazy-imported only inside the
+  `--sarif` branch, so the text/json/summary paths stay zero-new-dependency
+  and byte-identical to v2.12.5 (verified by golden-output diff).
+- Mapping: severity -> SARIF level (critical/high -> error, medium ->
+  warning, low/info/unknown -> note); line=0 -> no region, line>0 ->
+  startLine == line (never startLine: 0); Windows-style paths -> forward-
+  slashed relative URIs under a `SRCROOT` uriBaseId; empty `rule_id` ->
+  synthesized `rf/<scanner>/<category-slug>` descriptors (correlation/meta
+  get their own namespace); `rules[]` deduped + sorted; every result.ruleId
+  resolves in `driver.rules`; `partialFingerprints` carry `findingId` and a
+  `stableLocationV1` sha1 (survives snippet rotation; distinct occurrences of
+  the same rule+file get distinct fingerprints); suppressed findings get
+  `suppressions[0].kind = "external"`.
+- The OASIS SARIF 2.1.0 JSON Schema is vendored at
+  `tests/schemas/sarif-schema-2.1.0.json` (draft-07, sha256
+  `7c9688f0a1c4a4e1649ecc78521087e664729c1dff56ee8212ff195c7b16132a`).
+  `test_sarif_export.py` validates output against it with `Draft7Validator`
+  (importorskip `jsonschema`, so the test skips cleanly where jsonschema is
+  absent) and pins `TOOL_VERSION` to `.claude-plugin/plugin.json`.
+- `run_forensics.sh` plumbs `--format sarif` through the aggregator dispatch
+  and the `MACHINE_FORMAT` banner/progress suppression (sarif suppresses the
+  human banner exactly as json does; text/summary output is unchanged).
+
+### Fixed — SARIF URI normalization (path-traversal hardening)
+
+- `_normalize_uri` previously rewrote `\` -> `/` unconditionally. On POSIX a
+  backslash in a filename is a literal data character, so `back\slash file.txt`
+  became the phantom path `back/slash file.txt` and `..\..\etc\passwd.txt`
+  became the `..` traversal URI `../../etc/passwd.txt` that escaped SRCROOT
+  (a high-severity location-integrity issue). Now POSIX keeps `\` literal
+  (percent-encoded as `%5C`); only
+  Windows converts its own separator. All URI-unsafe characters are
+  percent-encoded per RFC 3986 (`urllib.parse.quote(path, safe='/')`). A hard
+  guard strips leading `../` segments and falls back to the bare basename when
+  any `..` segment remains, so an emitted URI is always repo-relative with no
+  `..` component, no leading `/`, and no scheme.
+
+### Changed — env-copy severity recalibration (ST-EX-005/006/007 low -> medium)
+
+- Bulk environment access (ST-EX-005), JS env key enumeration (ST-EX-006),
+  and full environment copy (ST-EX-007) are now `medium` standalone, not
+  `low`. Full/bulk env access is a classic credential-harvest primitive and
+  flooring it at `low` undersold the risk. Single env-variable access
+  (ST-EX-008) stays `low`. The correlation engine is unchanged: a proven
+  env-read + network-sink flow still escalates to `critical` as before.
+- `scan_skill_threats.py` splits the exfil severity table: 005/006/007 emit
+  `medium`, 008 emits `low`. Benign env-read fixtures stay clean (no new FPs).
+
 ## [2.12.5] - 2026-07-25
 
 ### Fixed — skills load in GitHub Copilot CLI (thanks @thejesh23)

@@ -92,10 +92,12 @@ PREREQUISITE_RULES = _rules_for_category("prerequisite-attack")
 EXFIL_RULES = _rules_for_category("credential-exfiltration")
 # The credential-exfil rules historically emitted at different severities by
 # sub-table; we re-derive the split from rule id so the call sites keep the same
-# per-table default severity (parity). 005-007 = bulk-env critical, 008 = single
-# env-access medium, 001-004 = webhook/base64/readfile critical.
-EXFIL_RULES_CRITICAL = tuple(r for r in EXFIL_RULES if r.id in ("ST-EX-005", "ST-EX-006", "ST-EX-007"))
-EXFIL_RULES_MEDIUM = tuple(r for r in EXFIL_RULES if r.id == "ST-EX-008")
+# per-table default severity. Bulk/copy environment access (005/006/007) is
+# medium standalone, a classic credential-harvest primitive; single env-var
+# access (008) is low. Correlation escalates a proven env-read + network-sink
+# flow to critical as it does today (the correlation engine is untouched).
+EXFIL_RULES_MEDIUM = tuple(r for r in EXFIL_RULES if r.id in ("ST-EX-005", "ST-EX-006", "ST-EX-007"))
+EXFIL_RULES_LOW = tuple(r for r in EXFIL_RULES if r.id in ("ST-EX-008",))
 EXFIL_RULES_OTHER = tuple(r for r in EXFIL_RULES if r.id in ("ST-EX-001", "ST-EX-002", "ST-EX-003", "ST-EX-004"))
 CREDENTIAL_PATH_RULES = _rules_for_category("credential-path-directive")
 PERSISTENCE_RULES = _rules_for_category("persistence")
@@ -636,9 +638,10 @@ def scan_content(content, rel_path, budget=None):
         findings.extend(scan_rules(content, rel_path, PREREQUISITE_RULES, "prerequisite-attack", "critical"))
 
     if ext in code_exts or is_agent_instruction_file:
-        # Cat 4: Credential exfiltration (bulk = critical, single = medium)
-        findings.extend(scan_rules(content, rel_path, EXFIL_RULES_CRITICAL, "credential-exfiltration", "critical"))
+        # Cat 4: Environment access is a capability until a sink is proven.
+        # Bulk/copy env access (005/006/007) is medium; single env-var (008) low.
         findings.extend(scan_rules(content, rel_path, EXFIL_RULES_MEDIUM, "credential-exfiltration", "medium"))
+        findings.extend(scan_rules(content, rel_path, EXFIL_RULES_LOW, "credential-exfiltration", "low"))
         findings.extend(scan_rules(content, rel_path, EXFIL_RULES_OTHER, "credential-exfiltration", "critical"))
         # Cat 5: Persistence
         findings.extend(scan_rules(content, rel_path, PERSISTENCE_RULES, "persistence", "high"))

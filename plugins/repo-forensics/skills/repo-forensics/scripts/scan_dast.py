@@ -4,10 +4,10 @@ scan_dast.py - Dynamic Analysis Security Testing for Claude Code Hooks (v1)
 Executes hook scripts with malicious payloads in a sandboxed subprocess
 and measures behavior: timeout, crash, output amplification, mutation.
 
-Inspired by ClawSec's hook execution harness, adapted to Python-only approach
-with strict sandboxing (subprocess timeout + resource limits + no network).
+Python-only harness with strict sandboxing (subprocess timeout + resource
+limits + no network).
 
-Test payloads (8 types adapted from ClawSec):
+Test payloads (8 types):
   1. Prompt injection in tool input
   2. Path traversal in file arguments
   3. Command injection in arguments

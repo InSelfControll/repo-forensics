@@ -40,6 +40,7 @@ jobs:
           skills/repo-forensics/tests/test_hook_scripts.py
           skills/repo-forensics/tests/test_openclaw_install.py
           skills/repo-forensics/tests/test_codex_install.py
+          skills/repo-forensics/tests/test_sarif_export.py
       - name: Stable payload self-check
         run: python skills/repo-forensics/scripts/refresh_threat_dbs.py --self-check
 

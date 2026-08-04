@@ -5,7 +5,7 @@ SHA256 baseline checking for critical files (.claude/settings.json,
 CLAUDE.md, hook scripts). Detects unauthorized modifications that
 could indicate CVE-2025-59536-style attacks.
 
-Inspired by ClawSec's Soul Guardian, adapted to Python-only approach.
+Python-only file-integrity monitor.
 
 Modes:
   --watch    Store baselines on first run, alert on drift on subsequent runs.

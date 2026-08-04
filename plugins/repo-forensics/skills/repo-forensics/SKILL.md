@@ -5,7 +5,7 @@ metadata:
   author: Alex Greenshpun
 allowed-tools: Bash Read Glob Grep
 user-invocable: true
-argument-hint: <repo_path> [--skill-scan] [--format text|json|summary] [--update-iocs] [--update-vulns] [--no-vulns] [--offline] [--watch] [--verify-install]
+argument-hint: <repo_path> [--skill-scan] [--format text|json|summary|sarif] [--update-iocs] [--update-vulns] [--no-vulns] [--offline] [--watch] [--verify-install]
 ---
 
 <!-- repo-forensics v2 | built by Alex Greenshpun | https://linkedin.com/in/alexgreensh -->
@@ -426,6 +426,14 @@ Note: `.forensicsignore` itself is scanned for attacker-planted wildcard suppres
 - `--format text` (default): Colored human-readable output with severity tags
 - `--format json`: Machine-readable JSON array of Finding objects
 - `--format summary`: Counts only (for CI/CD scripting)
+- `--format sarif`: SARIF 2.1.0 (GitHub code-scanning compatible). Emits a
+  single `runs[0]` with `tool.driver.rules` (deduped, sorted) and `results[]`
+  carrying `level`, `message`, `locations[].physicalLocation` (relative URI +
+  `SRCROOT` uriBaseId), `partialFingerprints` (findingId + stableLocationV1),
+  and `properties` (scanner/category/confidence). Suppressed findings get
+  `suppressions[0].kind = "external"`. The vendored schema is at
+  `tests/schemas/sarif-schema-2.1.0.json` (draft-07, sha256
+  `7c9688f0a1c4a4e1649ecc78521087e664729c1dff56ee8212ff195c7b16132a`).
 
 ## GitHub Actions
 
