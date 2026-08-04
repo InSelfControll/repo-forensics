@@ -426,6 +426,17 @@ def _script_path():
     return str(_SCRIPTS_DIR / "run_forensics.sh")
 
 
+# The run_forensics.sh entrypoint is a bash script; Windows-native Python
+# cannot exec it directly (users invoke it via WSL/git-bash). The SARIF
+# converter logic itself is covered cross-platform by the unit tests above,
+# including the forced-os.sep Windows-branch test.
+_needs_bash = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="run_forensics.sh entrypoint requires a bash interpreter",
+)
+
+
+@_needs_bash
 def test_sarif_end_to_end_secrets_fixture(tmp_path):
     cfg = tmp_path / "config.py"
     cfg.write_text(
@@ -448,6 +459,7 @@ def test_sarif_end_to_end_secrets_fixture(tmp_path):
         assert res["level"] in {"error", "warning", "note", "none"}
 
 
+@_needs_bash
 def test_sarif_end_to_end_clean_fixture(tmp_path):
     (tmp_path / "README.md").write_text("# Clean\n")
     (tmp_path / "main.py").write_text("print('hi')\n")
