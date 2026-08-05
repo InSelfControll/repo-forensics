@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
 import rule_loader
+import _context_gate
 from _shared_patterns import EXFIL_VERBS_RE, SKILL_CONFIG_FILES
 
 SCANNER_NAME = "skill_threats"
@@ -580,6 +581,61 @@ def scan_hex_encoding(content, rel_path):
     return findings
 
 
+def _mh_gate_demotes(finding, rel_path, content):
+    """Memory-Heist context-gate policy (design §5.3).
+
+    Returns True when a memory-heist-exfil finding's carrier context is benign
+    enough to demote to ``evidence_class="inferred"`` (the report layer then
+    caps severity->low + confidence->0.40 and records original_severity). The
+    ST-MH-001..005 patterns stay byte-identical; this gate only decides
+    evidence class, never whether the rule fires.
+
+    Demotion rules (any one fires -> inferred):
+      1. file_ctx.is_test_fixture            (test paths / test-shaped basenames)
+      2. file_ctx.is_security_doc            (PRIVACY.md / SECURITY.md self-desc)
+      3. file_ctx.primary == "prose-doc" via a docs/doc/documentation path
+         segment                              (docs/plans prose, NOT a bare .md
+                                              at repo root — parity corpus lives
+                                              there and must stay direct)
+      4. prose-primary / agent-instruction file and the matched line is inside a
+         CLOSED ``` fence   (fenced shell samples in SKILL.md / docs)
+    NOTE: a fifth rule (code-comment / quoted-string demotion) was designed but
+    deliberately NOT applied to memory-heist (Alex's call, 2026-08-05): an AI
+    agent reads code comments, so an exfil directive in a `.py` comment must stay
+    CRITICAL. Docs/prose/fenced/test/security contexts still demote.
+
+    Otherwise return False (leave evidence_class="" -> central inference returns
+    `direct` via the memory-heist-exfil directive carve-out, today's behavior).
+    Never raises; _context_gate degrades to the safest LOUD context on any
+    error, which maps to not-demoting (the loud direction)."""
+    try:
+        fctx = _context_gate.classify_file_context(rel_path, content)
+        if fctx.is_test_fixture:
+            return True
+        # is_security_doc is basename-stem based (security/privacy) and
+        # extension-INDEPENDENT. Only demote when the carrier is actually a
+        # prose doc: a code/config file named security.py / privacy.json is a
+        # real MH attack surface and must stay CRITICAL (agents read code,
+        # Alex's call 2026-08-05). Torture v2.13.2 FN+FP lanes caught this seam.
+        if fctx.is_security_doc and fctx.primary == "prose-doc":
+            return True
+        if fctx.primary == "prose-doc":
+            parts = _context_gate._normalize_parts(rel_path)[0]
+            if any(seg in core._DOC_PATH_SEGMENTS for seg in parts):
+                return True
+        if fctx.primary in ("prose-doc", "agent-instruction"):
+            lctx = _context_gate.classify_line_context(rel_path, content, finding.line)
+            if lctx == "fenced-code":
+                return True
+        # Code-comment/string demotion deliberately NOT applied to memory-heist:
+        # an agent reads code comments, so an exfil directive in a `.py` comment
+        # must stay CRITICAL (Alex's call, 2026-08-05). The ~8 token-optimizer
+        # comment FPs are the accepted cost of catching comment-embedded attacks.
+        return False
+    except Exception:
+        return False
+
+
 def scan_file(file_path, rel_path, budget=None):
     """Run all categories on a single file (reads, then delegates to scan_content).
 
@@ -706,8 +762,26 @@ def scan_content(content, rel_path, budget=None):
     # Detects keyboard exfiltration, fake authentication, user-agent routing,
     # PII-to-URL encoding, and tool-limitation exploitation.
     if ext in text_exts or ext in code_exts:
-        findings.extend(scan_rules(content, rel_path, MEMORY_HEIST_RULES,
-                                   "memory-heist-exfil", "critical"))
+        mh_findings = scan_rules(content, rel_path, MEMORY_HEIST_RULES,
+                                 "memory-heist-exfil", "critical")
+        # v2.13.2 Memory-Heist recalibration (design §5.3). The ST-MH-001..005
+        # patterns stay byte-identical (they catch the 5 real UA-routing /
+        # PII-in-URL attacks; tightening them lost those catches at cc440b3).
+        # Instead of tightening, route the benign FP mass through the SAME
+        # _context_gate primitive the YARA scanner uses: set
+        # evidence_class="inferred" when ANY demotion rule fires, and let the
+        # existing report-layer cap (apply_evidence_caps) demote severity->low
+        # + confidence->0.40 and record original_severity. The finding stays
+        # LISTED (visible, auditable, fail-loud) — never silently suppressed.
+        # Central inference would otherwise return `direct` via the
+        # memory-heist-exfil directive carve-out (forensics_core.py:64), which
+        # is correct for attack prose in SKILL.md but wrong for PRIVACY.md
+        # self-description, docs/plans prose, fenced shell samples, and code
+        # comments/strings.
+        for f in mh_findings:
+            if _mh_gate_demotes(f, rel_path, content):
+                f.evidence_class = "inferred"
+        findings.extend(mh_findings)
 
     # Cat 16: Morse code encoding (Grok/Bankrbot, May 2026)
     findings.extend(scan_morse_encoding(content, rel_path))

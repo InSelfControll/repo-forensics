@@ -46,7 +46,7 @@
     "scripts/rule_loader.py": "72500a303020ade3680fe9c4974e12d3d093873182d7a1de2a1563ebbc287ea2",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
     "scripts/run_forensics.sh": "e68ee91d5951f7f16fc0961df90cbcd44f5e11276f4af2670700b4092a93bded",
-    "scripts/sarif_export.py": "70df889074aa530b918c4451db2c05989cad648b2765a3c8fff1d29caa9c2dc4",
+    "scripts/sarif_export.py": "0974e1f4c2fbbb579c7d2579d9b1180008b78d0ab09e550d5e087d8776c5a8f7",
     "scripts/scan_agent_skills.py": "722e114ba23a13f2d415833de0df27748fa2b10db59a821d48c6558fbe64f420",
     "scripts/scan_archive.py": "19b4468414cedf3c676a110c273475eb3b039400d09665c1ae44914b69d0095e",
     "scripts/scan_ast.py": "34a7f1fe1769784184224f21a54a6b38eda33f8604989936bfc5b0164f483c35",
@@ -70,10 +70,10 @@
     "scripts/scan_oversize.py": "372842202bf5872336685e7c4354bd1e8f18a9bfcfd71d1429ba3dea6976036e",
     "scripts/scan_post_incident.py": "9ee2efc459f98bc35a0d176085e6d6fb399c263751e1d6c7616402e378527bfd",
     "scripts/scan_provenance.py": "5305a2d2b3029b8de08855fe8d913cdae7f437becd3e002ab233a4bee670fa25",
-    "scripts/scan_runtime_dynamism.py": "7e9fe4f275bc15a7419686b9891c5927267fe19fd2b32807f25d2721650218ae",
+    "scripts/scan_runtime_dynamism.py": "27304e0a3efeabc5e898b26d46d9deb55fed7f786b3259019ef68c271d4bf70e",
     "scripts/scan_sast.py": "c6978c8252856fce5b9623457758ee4f2990e8b8ea4958b17455f75c093b4247",
     "scripts/scan_secrets.py": "daecda8c24f2f41fcefa91c50a726bb9df13c5938a2dceee354e335c697a0b2a",
-    "scripts/scan_skill_threats.py": "95dfd1b83e894bc53096f8efbe9b11d5eb3a98c125e48ff553dd596623fc0300",
+    "scripts/scan_skill_threats.py": "7596c97fe6055a89b7170644d0cc4ef7ff8ee5de22c99ab8aaa3dd4581a56b9f",
     "scripts/scan_splitstream.py": "95f8b56fcfd6d3900af823269e9a6e8ef1c7a0d2b417bd1936bf0f0293175a6e",
     "scripts/scan_yara.py": "d64e8ddc6bc8bddc8d7d673450db9f0a6d45dade3d5fa9f808a4e2d629107e78",
     "scripts/session_scan.py": "ebd4caa11a011a22584619fc5679e380e72ebb59657eb362bca6a1c889251c19",
@@ -98,9 +98,9 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "1bbc67562fcceb5bd45110a3c44c63706b105fb4e4b47f1de3ee2afee606ab1c",
-    ".claude-plugin/plugin.json": "654cf0ca174f7238bcfd69ea830130501b904fee889fdd7b4948fccbae277829",
-    ".codex-plugin/plugin.json": "42c3bdcb2e45a6e894742d14faa070365c9d20655af9359864033669414c8645"
+    ".claude-plugin/marketplace.json": "a362357d21cf3cdaa972217f0cf1ec8ccd5734b452154941bb712905805404a0",
+    ".claude-plugin/plugin.json": "ef52fe38badc2176018068508771afcecc5b1703dca3c3f0c5fcf41cb6c97ab6",
+    ".codex-plugin/plugin.json": "954ff9b5f373961ea03bd536f189f555fedf2f991966a4f3bdb46e453c27a4ed"
   },
   "manifest_count": 3,
   "repo_source_manifests": {
