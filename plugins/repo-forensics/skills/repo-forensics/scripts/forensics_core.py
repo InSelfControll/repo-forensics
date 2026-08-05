@@ -199,7 +199,7 @@ def _is_comment_or_string(snippet):
 def infer_evidence_class(scanner, category, file_path, snippet):
     """Centrally infer an evidence_class from scanner / category / file type /
     comment/string context. This is the single place evidence_class is derived,
-    so the 20 scanners never need to hand-tag it.
+    so the 27 scanners never need to hand-tag it.
 
     Precedence (first match wins):
       1. directive category  -> direct   (the four named directive detectors)
@@ -1442,12 +1442,28 @@ def correlate(findings, repo_path=None):
     # different relative paths are a P1 follow-up.)
     by_file = {}
     _SYNTHETIC_FILE_TOKENS = ("", "(multiple files)")
+    # Scanners whose findings are already compound family verdicts (a YARA
+    # match is a confirmed multi-string indicator, not a primitive capability).
+    # Feeding their descriptive prose back into keyword correlation
+    # manufactures compound findings from vocabulary accidents (D1: "$_REQUEST"
+    # in a webshell explanation satisfies network_keywords with no network call
+    # present). They remain in the report at full weight; they simply never act
+    # as correlation LEAVES. Because every correlation rule (1-27, trifecta,
+    # cross-file trifecta) reads from by_file/file_findings, this single
+    # exclusion covers all rules uniformly. No correlation rule keys on
+    # malware-family categories, so excluding the yara scanner loses nothing.
+    _CORRELATION_LEAF_EXCLUDED_SCANNERS = {"yara"}
     for f in findings:
         # Defense in depth (Issue #38): exclude synthetic aggregates (no real
         # importer location) from `by_file` so they cannot seed a correlation
         # bucket that later picks up unrelated findings tied to the same fake
         # path. Real findings always have a non-empty file path.
         if not f.file or f.file in _SYNTHETIC_FILE_TOKENS:
+            continue
+        # D1: exclude compound-family scanners from the correlation leaf pool.
+        # Their findings stay in the report (the caller still has the full
+        # `findings` list); they just never seed/satisfy a correlation bucket.
+        if f.scanner in _CORRELATION_LEAF_EXCLUDED_SCANNERS:
             continue
         by_file.setdefault(f.file, []).append(f)
 

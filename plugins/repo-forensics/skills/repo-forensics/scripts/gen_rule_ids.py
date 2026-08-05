@@ -59,6 +59,11 @@ _SCANNER_ABBREV = {
     # scrape), so this abbrev emits ZERO rows in rule_ids.csv — registration for
     # completeness only. Expected, not a bug.
     "scan_dead_anchors.py": "DA",
+    # yara authors all its rule ids directly in data/yara/manifest.json
+    # (rule_meta[].id), so this abbrev emits ZERO scraped rows — registration
+    # for namespace completeness only. The minted YR-* ids are appended to
+    # rule_ids.csv manually. Expected, not a bug.
+    "scan_yara.py": "YR",
 }
 
 # Table-name fragment -> CATEGORY abbreviation. First matching fragment wins.
