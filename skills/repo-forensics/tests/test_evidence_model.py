@@ -210,3 +210,57 @@ def test_finding_id_stable_and_present(tmp_path):
     assert f1.finding_id and f2.finding_id and f3.finding_id
     assert f1.finding_id == f2.finding_id  # same evidence -> same id
     assert f1.finding_id != f3.finding_id  # different snippet -> different id
+
+
+# ---------------------------------------------------------------------------
+# 6. v2.13.2 Memory-Heist gated finding -> aggregate cap proof (design §6 #4)
+# ---------------------------------------------------------------------------
+
+
+def test_gated_memory_heist_finding_caps_to_low_with_original_severity(tmp_path):
+    """v2.13.2 aggregate-level proof (design §6 #4). A memory-heist-exfil
+    finding the context gate tagged evidence_class=inferred (scanner-level
+    severity still "critical", so the parity key is unchanged) must, after
+    apply_evidence_caps runs inside build_report:
+
+      - severity capped to "low"
+      - original_severity preserved as "critical" (auditable)
+      - confidence capped to 0.40 (_SEVERITY_CONFIDENCE["low"])
+      - exit code unaffected by THIS finding (a single low cannot drive 2)
+
+    This is the fail-loud invariant: the finding stays listed with both the
+    scanner's claim and the evidence model's cap; it is never silently
+    suppressed."""
+    repo = _scan_dir(tmp_path)
+    _write(tmp_path / "skill_threats.out", json.dumps([
+        {"scanner": "skill_threats", "severity": "critical",
+         "title": "PII-to-URL encoding directive: exfiltration via URL path",
+         "description": "Matched in memory-heist-exfil scan",
+         "file": "PRIVACY.md", "line": 34,
+         "snippet": "file paths which embed the local username as a path component",
+         "category": "memory-heist-exfil", "rule_id": "ST-MH-004",
+         "confidence": 0.85, "evidence_class": "inferred"},
+    ]))
+    _write(tmp_path / "skill_threats.err", "")
+    _write(tmp_path / "skill_threats.exit", "2")
+
+    report = module.build_report(str(tmp_path), str(repo), "true")
+
+    # The cap moved the only critical -> low, so the report has no critical.
+    assert report["summary"]["critical"] == 0, (
+        "inferred MH finding should have been capped critical->low; "
+        f"summary={report['summary']}"
+    )
+    assert report["summary"]["low"] >= 1
+    # A single low cannot drive a block (exit 2). Exit code is unaffected by
+    # the cap (no critical/high/medium remain).
+    assert report["exit_code"] != 2, (
+        f"a gated MH finding must not drive exit 2; got {report['exit_code']}"
+    )
+    f = report["findings"][0]
+    assert f["severity"] == "low"
+    assert f["evidence_class"] == "inferred"
+    assert f.get("original_severity") == "critical"  # auditable
+    assert abs(float(f["confidence"]) - 0.40) < 1e-9, (
+        f"confidence must cap to 0.40; got {f.get('confidence')}"
+    )

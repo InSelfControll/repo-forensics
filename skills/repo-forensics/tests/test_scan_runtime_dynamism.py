@@ -11,6 +11,37 @@ import scan_runtime_dynamism as scanner
 
 
 class TestDynamicImports:
+    def test_module_from_spec_in_test_demotes(self, tmp_path):
+        """Restored from cc440b3 as a gating test (design §5.4/§6 #3). The
+        broad RD-SMOD-003 pattern still fires on `module_from_spec` (the
+        critical->low downgrade that cc440b3 reverted under-rated the real
+        write-then-load attack); the context gate demotes ONLY when the
+        carrier is a test fixture. The rule FIRES; severity stays critical at
+        the scanner level (parity key unchanged); evidence_class=inferred
+        drives the report-layer cap. The old cc440b3-deleted assertion
+        (`severity == "low"`) is replaced by the gating assertion."""
+        f = tmp_path / "test_loader.py"
+        f.write_text("mod = importlib.util.module_from_spec(spec)\n")
+        findings = scanner.scan_file(str(f), "test_loader.py")
+        hits = [finding for finding in findings if finding.rule_id == "RD-SMOD-003"]
+        assert len(hits) == 1
+        assert hits[0].category == "self-modification"
+        # Scanner-level severity unchanged (the cap is the report layer's job).
+        assert hits[0].severity == "critical"
+        # Test-fixture context -> demoted to inferred.
+        assert hits[0].evidence_class == "inferred"
+
+    def test_module_from_spec_in_non_test_stays_direct(self, tmp_path):
+        """The real write-then-load attack (case02-write-py-loader) is NOT
+        test-path-shaped and must stay critical/direct under the gate."""
+        f = tmp_path / "loader.py"
+        f.write_text("mod = importlib.util.module_from_spec(spec)\n")
+        findings = scanner.scan_file(str(f), "loader.py")
+        hits = [finding for finding in findings if finding.rule_id == "RD-SMOD-003"]
+        assert len(hits) == 1
+        assert hits[0].severity == "critical"
+        assert hits[0].evidence_class == "direct"
+
     def test_importlib_import_module_variable(self, tmp_path):
         f = tmp_path / "loader.py"
         f.write_text(

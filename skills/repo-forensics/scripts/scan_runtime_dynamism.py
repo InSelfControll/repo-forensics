@@ -25,6 +25,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import forensics_core as core
 import rule_loader
+import _context_gate
 
 SCANNER_NAME = "runtime_dynamism"
 
@@ -223,6 +224,24 @@ def scan_file_regex(file_path, rel_path):
         findings.extend(core.scan_rule_patterns(
             content, rel_path, rules, category, severity, SCANNER_NAME
         ))
+
+    # v2.13.2 RD-SMOD-003 recalibration (design §5.4). Keep main's critical /
+    # self-modification severity everywhere EXCEPT when the carrier is a test
+    # fixture: the dominant TO FP mass is "dozens of test files loading modules
+    # under test" via module_from_spec. Test-file context demotes to
+    # evidence_class="inferred" (report layer caps severity->low + confidence->
+    # 0.40, records original_severity; the finding stays LISTED). The real
+    # write-then-load attack (case02-write-py-loader) is NOT test-path-shaped
+    # and therefore stays critical/direct. Scoped to RD-SMOD-003 only; other
+    # self-modification rules (RD-SMOD-001/002/004) keep full severity
+    # everywhere until torture shows FP mass worth a policy.
+    for f in findings:
+        if f.rule_id == "RD-SMOD-003":
+            try:
+                if _context_gate.classify_file_context(rel_path, content).is_test_fixture:
+                    f.evidence_class = "inferred"
+            except Exception:
+                pass
 
     return findings
 

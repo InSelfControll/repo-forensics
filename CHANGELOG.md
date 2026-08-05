@@ -2,6 +2,36 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.13.2] - 2026-08-05
+
+### Changed: Memory-Heist context-gating (fewer false positives, no lost attacks)
+
+- The `memory-heist-exfil` rules (ST-MH-001..005) now route through the unified
+  file-type / line-context classifier from v2.13.1. Patterns are byte-identical, so
+  the real UA-routing and PII-in-URL attacks still fire at CRITICAL, but the same
+  patterns sitting in documentation prose, fenced code samples, `SECURITY.md` /
+  `PRIVACY.md` self-descriptions, or test fixtures demote to informational. Every
+  demoted finding stays listed with its original severity, so nothing is silently
+  suppressed. This replaces the previous all-or-nothing behavior that accepted a wall
+  of benign false positives to avoid losing a real catch.
+- `module_from_spec` (RD-SMOD-003) demotes only in test-fixture context; a real
+  write-then-load in production code stays CRITICAL.
+
+### Security decision: an exfil directive in code stays CRITICAL
+
+- Two deliberate calls, both because an AI agent reads code: a Memory-Heist directive
+  hidden in a code comment or string, and one hidden in a code or config file named
+  `security.*` / `privacy.*`, both stay CRITICAL rather than demoting. The handful of
+  benign comment and security-named false positives are the accepted cost of catching
+  attacks that hide there. Documentation, prose, and test contexts still demote.
+
+### Fixed: codex marketplace mirror checksums
+
+- The codex distribution mirror's signed `checksums.json` now includes the YARA and
+  context-gate files shipped in v2.13.1 (they were present but unlisted, so a
+  codex-install integrity check returned PARTIAL). The release gate now verifies both
+  the canonical and mirror manifests before tagging so this cannot recur.
+
 ## [2.13.1] - 2026-08-05
 
 ### Added: unified context-gating primitive + YARA evidence gating
