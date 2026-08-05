@@ -82,6 +82,10 @@ EXPECTED_BASE_SCANNER_NAMES = {
     # (repojacking / phantom package / expired domain / dangling cloud slug).
     # Standalone algorithmic scanner, network-touching, silent-by-default.
     "dead_anchors",
+    # 2026-08 YARA signature scanner (curated malware/webshell/cryptominer/
+    # hacktool signatures via optional yara-python; degrades to a missing-tool
+    # capability gap when yara-python is absent, exit-neutral).
+    "yara",
 }
 
 # Synthetic scanner entries injected by aggregate_json.py AFTER the real

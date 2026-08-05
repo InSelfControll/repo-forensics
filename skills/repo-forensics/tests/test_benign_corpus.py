@@ -74,6 +74,7 @@ _SCAN_FILE_MODULES = [
     "scan_runtime_dynamism",
     "scan_entrypoint",
     "scan_manifest_drift",
+    "scan_yara",
 ]
 
 # Scanners with specialised entry points: only called for matching filenames.

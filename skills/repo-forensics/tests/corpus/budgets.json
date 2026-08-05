@@ -87,5 +87,13 @@
     "medium": 0,
     "low": 0,
     "_comment": "Dead-anchor fixture: live GitHub owner/repo + github: shorthand, live npm (lodash) / PyPI (requests) install commands, safe-allowlisted docs domains. The committed-corpus gate runs the per-file scan_file scanners (secrets/sast/skill_threats/…) on it and they must stay at zero. dead_anchors itself is a scan_repo scanner (not in _SCAN_FILE_MODULES) so its LO-branch silence is asserted separately in test_scan_dead_anchors.py (test_benign_corpus_all_lo_zero_findings) with the network mocked to 200/registered — never a real request in CI."
+  },
+
+  "benign/minified_bundle.js": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "_comment": "Minified jQuery-shaped bundle: high-entropy single-letter identifiers, eval()/document.write call shapes, and base64 data-URIs. The classic YARA FP source for naive single-token rules. The curated repo-forensics YARA rules use multi-string conjunctive conditions + filesize bounds, so this MUST stay at zero findings. Added 2026-08 with the YARA scanner (v2.13.0)."
   }
 }

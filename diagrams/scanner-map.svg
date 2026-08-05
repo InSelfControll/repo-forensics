@@ -75,7 +75,7 @@
   <!-- Center glow halo -->
   <circle cx="450" cy="275" r="155" fill="url(#centerGlow)" opacity="0.6"/>
 
-  <!-- Connection lines from center to scanners (16 shown; agent_skills, post_incident, devcontainer omitted from visual) -->
+  <!-- Connection lines from center to scanners (17 shown; agent_skills, post_incident, devcontainer omitted from visual) -->
   <!-- 0: skill_threats (red) -->
   <line x1="450" y1="275" x2="450" y2="95" stroke="#ff4444" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
   <!-- 1: mcp_security (red) -->
@@ -86,6 +86,8 @@
   <line x1="450" y1="275" x2="619" y2="206" stroke="#ff4444" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
   <!-- 4: sast (orange) -->
   <line x1="450" y1="275" x2="630" y2="275" stroke="#ff8c00" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
+  <!-- 16: yara (orange) — signature scanner, near sast in the detection cluster -->
+  <line x1="450" y1="275" x2="720" y2="275" stroke="#ff8c00" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
   <!-- 5: ast_analysis (orange) -->
   <line x1="450" y1="275" x2="619" y2="344" stroke="#ff8c00" stroke-width="1.2" stroke-opacity="0.4" stroke-dasharray="4,4"/>
   <!-- 6: entropy (orange) -->
@@ -115,7 +117,7 @@
   <text x="450" y="268" text-anchor="middle" fill="#e3f2fd" font-size="10.5" font-weight="600" letter-spacing="1">TARGET</text>
   <text x="450" y="283" text-anchor="middle" fill="#90caf9" font-size="9" letter-spacing="0.5">REPO</text>
 
-  <!-- SCANNER NODES — 16 around the circle -->
+  <!-- SCANNER NODES — 17 around the circle -->
   <!-- Orbit ring (decorative) -->
   <circle cx="450" cy="275" r="180" fill="none" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="3,6"/>
 
@@ -157,6 +159,14 @@
     <text x="630" y="273" text-anchor="middle" fill="#ffb347" font-size="7.5" font-weight="600" letter-spacing="0.5">sast</text>
     <text x="630" y="284" text-anchor="middle" fill="#ff9900" font-size="6.5" letter-spacing="0.3">8 languages</text>
     <circle cx="630" cy="275" r="30" fill="none" stroke="#ff8c00" stroke-width="0.6" opacity="0.4"/>
+  </g>
+
+  <!-- 16. yara (orange) — signature scanner, near sast in the detection cluster -->
+  <g filter="url(#glow)">
+    <circle cx="720" cy="275" r="30" fill="#150c00" stroke="#ff8c00" stroke-width="1.8"/>
+    <text x="720" y="273" text-anchor="middle" fill="#ffb347" font-size="7.5" font-weight="600" letter-spacing="0.5">yara</text>
+    <text x="720" y="284" text-anchor="middle" fill="#ff9900" font-size="6.5" letter-spacing="0.3">signatures</text>
+    <circle cx="720" cy="275" r="30" fill="none" stroke="#ff8c00" stroke-width="0.6" opacity="0.4"/>
   </g>
 
   <!-- 5. ast_analysis (orange) -->
@@ -263,6 +273,6 @@
   <text x="681" y="520" fill="#80deea" font-size="8" font-weight="600">Repository Integrity</text>
 
   <!-- Title -->
-  <text x="450" y="35" text-anchor="middle" fill="#e3f2fd" font-size="13" font-weight="700" letter-spacing="2" filter="url(#textglow)">repo-forensics — 25-scanner attack surface map</text>
+  <text x="450" y="35" text-anchor="middle" fill="#e3f2fd" font-size="13" font-weight="700" letter-spacing="2" filter="url(#textglow)">repo-forensics — 27-scanner attack surface map</text>
   <text x="450" y="52" text-anchor="middle" fill="#546e7a" font-size="9" letter-spacing="1">every node is a scanner | every line is a path to detection</text>
 </svg>

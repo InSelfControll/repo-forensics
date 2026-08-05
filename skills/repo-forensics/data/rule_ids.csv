@@ -540,3 +540,14 @@ RD-CP-008,RD,CP,scan_runtime_dynamism.py,environment-detection,,medium
 RD-CP-009,RD,CP,scan_runtime_dynamism.py,environment-detection,,medium
 ST-PI-019,ST,PI,scan_skill_threats.py,prompt-injection,,critical
 ST-PI-020,ST,PI,scan_skill_threats.py,prompt-injection,,critical
+YR-WEB-001,YR,webshell,scan_yara.py,manifest.json,0,critical
+YR-WEB-002,YR,webshell,scan_yara.py,manifest.json,0,critical
+YR-WEB-003,YR,webshell,scan_yara.py,manifest.json,0,critical
+YR-MAL-001,YR,malware,scan_yara.py,manifest.json,0,high
+YR-MAL-002,YR,malware,scan_yara.py,manifest.json,0,high
+YR-MAL-003,YR,malware,scan_yara.py,manifest.json,0,high
+YR-CRY-001,YR,cryptominer,scan_yara.py,manifest.json,0,high
+YR-CRY-002,YR,cryptominer,scan_yara.py,manifest.json,0,medium
+YR-HCK-001,YR,hacktool,scan_yara.py,manifest.json,0,medium
+YR-HCK-002,YR,hacktool,scan_yara.py,manifest.json,0,medium
+YR-HCK-003,YR,hacktool,scan_yara.py,manifest.json,0,medium

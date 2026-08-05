@@ -2,6 +2,79 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.13.1] - 2026-08-05
+
+### Added: unified context-gating primitive + YARA evidence gating
+
+- New `scripts/_context_gate.py` is the single deterministic, offline, stdlib-only
+  classifier that derives an evidence class from file type, path segment, and line
+  context. It never raises and accepts no absolute-path input, so every scanner can
+  route a match through one gating function instead of hand-tagging evidence.
+- `scan_yara.py` now consumes the classifier instead of a hard-coded
+  `evidence_class="direct"`. A YARA match on a real payload (`shell.php`, `x.bin`,
+  `config.json`) stays `direct` and CRITICAL, while the same bytes in a doc
+  (`x.md`, `docs/x.md`), a test fixture (`tests/test_x.py`), or a blocklist
+  (`blocklist.js`) demote to `inferred` so the verdict loses false-positive noise
+  without losing the real hit. Integrity, timeout, and read-error findings keep
+  `direct` so capability-gap signals are never gated away.
+- The YARA signature scanner (the 27th scanner, shipped in 2.13.0) is now
+  context-gated end to end. `yara-python` stays an optional dependency: when absent
+  the scanner degrades to a missing-tool capability gap (one stderr line,
+  exit-neutral, stdout `[]`), so the core product remains zero-non-stdlib-deps and
+  offline.
+
+### Added: 6 YARA signature false-negative widenings
+
+- Six existing rules had their strings or conditions widened so real family
+  variants fire, with no new rule IDs and re-pinned per-file sha256 in
+  `data/yara/manifest.json`: `YR-MAL-002`, `YR-WEB-002`, `YR-WEB-001` (the
+  `not $assert` condition fix), `YR-CRY-001`, `YR-HCK-002`, `YR-HCK-003`. Each
+  widening ships with a teeth trigger and a near-miss negative in
+  `tests/test_scan_yara.py` so a one-token guess still does not match.
+
+### Fixed: D1 correlation contamination from YARA leaves
+
+- `forensics_core.correlate()` now excludes `yara` from the `by_file` correlation
+  leaf set via `_CORRELATION_LEAF_EXCLUDED_SCANNERS = {"yara"}`. A YARA critical on
+  a webshell plus an unrelated AWS key in the same file no longer synthesizes a
+  bogus "Potential Data Exfiltration" finding. The YARA critical and the secrets
+  high still surface on their own; only the contaminated cross-scanner rule is
+  suppressed. A regression test (`tests/test_d1_yara_correlation.py`) pins a
+  webshell + AWS-key, no-network fixture to assert no exfiltration finding while
+  the real findings remain.
+
+### Fixed: torture-hardening (extension-blind demotion + scan_text traversal)
+
+- Extension-blind doc/blocklist demotion closed. A live payload on a code
+  extension (`readme.php`, `changelog.php`, `license.bat`, `docs/shell.php`,
+  `v1/docs/index.php`, `blacklist.bat`, `denylist.php`) now classifies
+  `primary="code"`, `gate_evidence="direct"`, and stays CRITICAL with exit 2. The
+  doc-basename, doc-path-segment, and blocklist-basename-token signals only
+  demote on doc, empty, or unknown extensions, never on a code extension. The
+  intended demotions still hold: a webshell in `.md` or `SKILL.md`, under
+  `tests/shell.php`, or in a `blocklist.json` config still demotes and lists.
+- `scan_yara.scan_text` now normalizes the caller `rel_path`
+  (`os.path.normpath(rel_path.replace("\\","/"))`) before constructing the
+  `Finding.file` and the SARIF uri, and `..` segments are collapsed before the
+  classifier evaluates segment membership. `scan_text(payload, "../../evil.php")`
+  and `"tests/../shell.php"` no longer carry `..` in `Finding.file`, and the
+  `tests/../shell.php` payload can no longer demote via a segment it escaped.
+
+### Docs
+
+- SARIF 2.1.0 output (shipped in 2.13.0) and the YARA signature scanner are now
+  documented in the README feature narrative and scanner table. The scanner count
+  is stated as 27 everywhere it appears (README, both SKILL.md copies, every
+  diagram), and `diagrams/scanner-map.svg` and `diagrams/pipeline.svg` now draw a
+  `yara` node.
+
+### Known residuals
+
+- Flag-value whitespace can miss a literal rule match (flag-value-whitespace
+  literal-rule miss), and the content-shape blocklist signal can false-positive
+  on a real filter-list file (content-shape blocklist FP). Both are accepted,
+  non-blocking, and tracked for a later release.
+
 ## [2.13.0] - 2026-08-04
 
 ### Added — SARIF 2.1.0 output (`--format sarif`)
@@ -31,30 +104,47 @@ All notable changes to repo-forensics. Versions follow semver.
   and the `MACHINE_FORMAT` banner/progress suppression (sarif suppresses the
   human banner exactly as json does; text/summary output is unchanged).
 
-### Fixed — SARIF URI normalization (path-traversal hardening)
+### Added — YARA signature scanner (`yara`)
 
-- `_normalize_uri` previously rewrote `\` -> `/` unconditionally. On POSIX a
-  backslash in a filename is a literal data character, so `back\slash file.txt`
-  became the phantom path `back/slash file.txt` and `..\..\etc\passwd.txt`
-  became the `..` traversal URI `../../etc/passwd.txt` that escaped SRCROOT
-  (a high-severity location-integrity issue). Now POSIX keeps `\` literal
-  (percent-encoded as `%5C`); only
-  Windows converts its own separator. All URI-unsafe characters are
-  percent-encoded per RFC 3986 (`urllib.parse.quote(path, safe='/')`). A hard
-  guard strips leading `../` segments and falls back to the bare basename when
-  any `..` segment remains, so an emitted URI is always repo-relative with no
-  `..` component, no leading `/`, and no scheme.
+- New `yara` scanner: curated YARA signatures for malware, webshells,
+  cryptominers, and hacktools. 11 hand-authored rules across 4 families
+  (`data/yara/{webshells,malware,cryptominers,hacktools}.yar`), each with a
+  `meta:` block (id/severity/category/confidence/title) mirrored in
+  `data/yara/manifest.json` with per-file sha256 integrity checks. Multi-
+  string conjunctive conditions + filesize bounds so a match is a confirmed
+  family indicator, not a single-token guess. Teeth tests confirm every rule
+  fires on its trigger and near-miss negatives (one missing conjunctive
+  string) stay clean.
+- `yara-python` is an **optional** dependency. When absent the scanner
+  degrades to a missing-tool capability gap: one stderr line containing the
+  `not found` enrichment marker (-> `enrichment_status.overall = DEGRADED`),
+  stdout `[]`, exit 0. The core product stays zero-non-stdlib-deps, offline,
+  and deterministic. CI installs `yara-python` on the Ubuntu test leg so the
+  live matcher runs there.
+- Severity assignments (R4 conservative initial): webshells CRITICAL,
+  reverse-shell/PowerShell/HTA stagers HIGH, XMRig stratum HIGH, browser
+  miner MEDIUM, hacktools (Mimikatz/Metasploit/LSASS-dump) MEDIUM.
+- Wired into `run_forensics.sh` (skill-scan + full-audit lists; count
+  strings 26 -> 27 / 16 -> 17), `auto_scan.py` targeted_scanners (14 -> 18),
+  `test_non_breaking_contract.py` EXPECTED_BASE_SCANNER_NAMES,
+  `test_benign_corpus.py` _SCAN_FILE_MODULES, `gen_rule_ids.py`
+  `_SCANNER_ABBREV` (YR), and `data/rule_ids.csv` (11 YR-* rows appended).
+- `.forensicsignore` excludes `data/yara/*.yar` and `manifest.json` so the
+  scanner does not self-fire on its own rule pack during a repo-forensics
+  self-scan.
+- New `tests/corpus/benign/minified_bundle.js` FP canary: a minified
+  jQuery-shaped blob (high-entropy single-letter identifiers, eval()/
+  document.write call shapes, base64 data-URIs) that MUST stay at zero
+  findings across all scan_file scanners. Budget locked in
+  `tests/corpus/budgets.json`.
 
-### Changed — env-copy severity recalibration (ST-EX-005/006/007 low -> medium)
+### Changed — version bump 2.12.5 -> 2.13.0
 
-- Bulk environment access (ST-EX-005), JS env key enumeration (ST-EX-006),
-  and full environment copy (ST-EX-007) are now `medium` standalone, not
-  `low`. Full/bulk env access is a classic credential-harvest primitive and
-  flooring it at `low` undersold the risk. Single env-variable access
-  (ST-EX-008) stays `low`. The correlation engine is unchanged: a proven
-  env-read + network-sink flow still escalates to `critical` as before.
-- `scan_skill_threats.py` splits the exfil severity table: 005/006/007 emit
-  `medium`, 008 emits `low`. Benign env-read fixtures stay clean (no new FPs).
+- `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
+  `.claude-plugin/marketplace.json`, `openclaw/openclaw.plugin.json`,
+  `.github/badges/metrics.json`: version 2.13.0; scanner count 26 -> 27
+  where stated. `scripts/sarif_export.py` `TOOL_VERSION` pinned to 2.13.0
+  and drift-checked by `test_sarif_export.test_tool_version_matches_plugin_json`.
 
 ## [2.12.5] - 2026-07-25
 

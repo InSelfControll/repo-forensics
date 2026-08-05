@@ -348,7 +348,7 @@ def run_scanner(scanner_script, repo_path):
 
 
 def run_targeted_scan(repo_path):
-    """Run 14 targeted scanners in parallel on a cloned/installed repo."""
+    """Run 18 targeted scanners in parallel on a cloned/installed repo."""
     if not os.path.isdir(repo_path):
         return []
 
@@ -370,6 +370,7 @@ def run_targeted_scan(repo_path):
         'scan_archive.py',
         'scan_bytecode.py',
         'scan_dead_anchors.py',
+        'scan_yara.py',
     ]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
