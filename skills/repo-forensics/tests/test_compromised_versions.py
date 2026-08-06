@@ -1119,3 +1119,68 @@ class TestMay2026Campaigns:
         )
         assert len(findings) == 1
         assert findings[0].severity == "critical"
+
+
+class TestAug2026KeyvCacheableCampaign:
+    """Spot checks for the August 2026 SHAI-HULUD "Here We Go Again" wave
+    (campaign `shai_hulud_keyv_cacheable_aug_2026`, keyv/cacheable namespaces).
+
+    Added 2026-08-06 alongside the 25-campaign IOC expansion.
+    """
+
+    def test_keyv_6_0_0_flagged(self):
+        """keyv@6.0.0 is the index release of the August 2026 wave."""
+        findings = scanner.check_compromised_versions(
+            {"keyv": "6.0.0"}, "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"
+        assert findings[0].category == "supply-chain"
+        assert "keyv" in findings[0].title
+
+    def test_cacheable_2_5_1_flagged(self):
+        findings = scanner.check_compromised_versions(
+            {"cacheable": "2.5.1"}, "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"
+        assert findings[0].category == "supply-chain"
+        assert "cacheable" in findings[0].title
+
+    def test_cacheable_request_13_0_20_flagged(self):
+        findings = scanner.check_compromised_versions(
+            {"cacheable-request": "13.0.20"}, "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"
+        assert findings[0].category == "supply-chain"
+        assert "cacheable-request" in findings[0].title
+
+    def test_keyv_4_5_4_not_flagged(self):
+        """Precision test: keyv 4.5.4 predates the compromise and is clean."""
+        findings = scanner.check_compromised_versions(
+            {"keyv": "4.5.4"}, "package.json"
+        )
+        assert len(findings) == 0
+
+    def test_keyv_6_0_1_not_flagged(self):
+        """Precision test: only the exact pinned version is compromised, not
+        every version above it."""
+        findings = scanner.check_compromised_versions(
+            {"keyv": "6.0.1"}, "package.json"
+        )
+        assert len(findings) == 0
+
+    def test_cacheable_2_5_0_not_flagged(self):
+        findings = scanner.check_compromised_versions(
+            {"cacheable": "2.5.0"}, "package.json"
+        )
+        assert len(findings) == 0
+
+    def test_keyv_caret_prefix_still_flagged(self):
+        """Range prefixes are stripped before lookup, same as other campaigns."""
+        findings = scanner.check_compromised_versions(
+            {"keyv": "^6.0.0"}, "package.json"
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "critical"

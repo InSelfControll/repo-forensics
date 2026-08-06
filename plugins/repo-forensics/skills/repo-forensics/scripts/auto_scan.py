@@ -102,8 +102,11 @@ PIPE_TO_SHELL = re.compile(
     re.IGNORECASE,
 )
 
-# Flags to strip from package names
-INSTALL_FLAGS = re.compile(r'\s+--?[a-zA-Z][\w-]*(?:\s+[^\s-][^\s]*)?')
+# Strip ONLY the flag token itself, never a following "value" — otherwise a
+# boolean flag swallows the next package (`npm install foo --save-exact keyv@6.0.0`
+# hid keyv). A real value-flag's argument (a URL, a path) is left as a token, but
+# it harmlessly matches no IOC. Every non-flag token must reach the IOC checks.
+INSTALL_FLAGS = re.compile(r'\s+--?[a-zA-Z][\w-]*')
 
 
 def parse_hook_input():
@@ -205,6 +208,206 @@ def extract_clone_target(match):
     if not _is_safe_scan_path(resolved):
         return None
     return resolved
+
+
+# npm-family installers pin versions as `name@version`, which the pip/uv strip
+# in extract_package_names() deliberately leaves untouched. These are the
+# pattern types whose tokens get the split treatment below.
+# Kept in sync with pre_scan.py — duplicated rather than imported so each hook
+# script stays standalone-loadable.
+NPM_FAMILY_INSTALLS = ('npm_install', 'yarn_add', 'pnpm_install', 'bun_install')
+
+
+def split_npm_name_version(token):
+    """Split an npm-family install token into (base_name, version).
+
+    The version separator `@` collides with the leading `@` of a scoped name,
+    so split on the LAST `@` and only when it is not that scope marker:
+      keyv@6.0.0        -> ('keyv', '6.0.0')
+      @scope/pkg@1.2.3  -> ('@scope/pkg', '1.2.3')
+      @scope/pkg        -> ('@scope/pkg', None)
+      keyv              -> ('keyv', None)
+
+    Also resolves the install forms that used to smuggle a malicious package
+    past the name/version checks:
+      npm alias   local@npm:keyv@6.0.0        -> ('keyv', '6.0.0')
+      tarball URL https://reg/keyv/-/keyv-6.0.0.tgz -> ('keyv', '6.0.0')
+      git URL     git+https://gh/x/keyv.git   -> ('keyv', None)
+    """
+    # npm alias: <localname>@npm:<realname>@<version> — resolve to the REAL pkg.
+    alias = re.search(r'@npm:(.+)$', token)
+    if alias:
+        token = alias.group(1)  # realname[@version]
+
+    # URL / git / tarball forms: extract the package name (and version if a
+    # tarball encodes one). check_ioc_packages compares whole tokens, so a URL
+    # never matches a name — pull the name out so the IOC checks see it.
+    if re.match(r'(?i)^(https?://|git\+|git://|ssh://|file:)', token):
+        # tarball: .../<name>-<version>.tgz  (name may be scoped .../@scope/name/-/name-1.2.3.tgz)
+        tgz = re.search(r'/([^/@\s]+)-(\d+\.\d+\.\d+[^/\s]*)\.(?:tgz|tar\.gz)$', token)
+        if tgz:
+            return tgz.group(1), tgz.group(2)
+        # git repo: .../<name>(.git)
+        git = re.search(r'/([^/@\s]+?)(?:\.git)?(?:#.*)?$', token)
+        if git:
+            return git.group(1), None
+        return token, None
+
+    idx = token.rfind('@')
+    if idx <= 0:
+        return token, None
+    version = token[idx + 1:]
+    return token[:idx], (version or None)
+
+
+def _semver_tuple(v):
+    """Best-effort (major, minor, patch) from a version string. Non-numeric
+    trailing segments (prerelease/build) are ignored for comparison."""
+    nums = []
+    for part in re.split(r'[.\-+]', v.strip()):
+        if part.isdigit():
+            nums.append(int(part))
+        else:
+            break
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums[:3])
+
+
+def _spec_could_match(spec, concrete):
+    """Could the npm version SPEC (^1.2.0, ~1.2, >=1.0.0, 1.x, 1.2.3, =1.2.3)
+    resolve to the concrete COMPROMISED version? The offline gate cannot query
+    the registry, so this is deliberately CONSERVATIVE: it returns True whenever
+    a range could include the compromised version (better to over-block one
+    package than wave a worm through), but False for a clean exact version and
+    for dist-tags like `latest`/`next`, which point at the maintainer's current
+    — now-fixed — release and must stay installable.
+    """
+    spec = (spec or '').strip()
+    if not spec:
+        return False
+    if spec.startswith('='):
+        spec = spec[1:].strip()
+    # dist-tag / non-semver (latest, next, a branch) -> resolves to fixed release
+    if re.match(r'^[A-Za-z]', spec):
+        return False
+    c = _semver_tuple(concrete)
+    low = spec.lower().replace('*', 'x')
+    # x-ranges: 6.x, 6.*, 6, 6.0.x
+    if 'x' in low or re.match(r'^\d+(?:\.\d+)?$', spec):
+        parts = low.split('.')
+        for i, part in enumerate(parts):
+            if part in ('x', ''):
+                break
+            if not part.isdigit() or (i < len(c) and int(part) != c[i]):
+                return False
+        return True
+    m = re.match(r'^(\^|~|>=|<=|>|<)?\s*v?(\d+(?:\.\d+){0,2}[^\s]*)$', spec)
+    if not m:
+        return True  # unparseable range -> conservative block
+    op = m.group(1) or '='
+    t = _semver_tuple(m.group(2))
+    if op == '=':
+        return c == t
+    if op == '^':  # >= t, < next-major (special-cased for 0.x per npm semantics)
+        if t[0] > 0:
+            return c >= t and c[0] == t[0]
+        if t[1] > 0:
+            return c >= t and c[0] == 0 and c[1] == t[1]
+        return c == t
+    if op == '~':  # >= t, < next-minor
+        return c >= t and c[0] == t[0] and c[1] == t[1]
+    if op == '>=':
+        return c >= t
+    if op == '>':
+        return c > t
+    if op == '<=':
+        return c <= t
+    if op == '<':
+        return c < t
+    return True
+
+
+def check_ioc_pinned_versions(pattern_type, package_names):
+    """Check npm-family `name@version` tokens against the IOC database.
+
+    Complements check_ioc_packages(), which compares whole tokens against the
+    name sets: a pinned token like `rimarf@1.0.0` matches no name, so the
+    install used to sail through while bare `rimarf` was flagged. Flags when
+    either the base name is a known-malicious package, or the exact pinned
+    version appears in the shipped compromised_versions map.
+
+    Fail-open on IOC-load failure, same contract as check_ioc_packages().
+    """
+    if pattern_type not in NPM_FAMILY_INSTALLS:
+        return []
+    try:
+        import ioc_manager
+        iocs = ioc_manager.get_iocs()
+    except (ImportError, AttributeError, KeyError, TypeError):
+        return []
+
+    all_malicious = iocs.get('malicious_npm', set()) | iocs.get('malicious_pypi', set())
+    compromised_versions = iocs.get('compromised_versions', {})
+
+    findings = []
+    for pkg in package_names:
+        base, version = split_npm_name_version(pkg)
+        if version is None:
+            continue  # bare names are already covered by check_ioc_packages()
+        base_lower = base.lower()
+        if base_lower in all_malicious:
+            findings.append({
+                'scanner': 'auto_scan',
+                'severity': 'critical',
+                'title': f"Known Malicious Package: '{base}@{version}'",
+                'description': f"Package '{base}' matches IOC database at any version. DO NOT INSTALL.",
+                'file': 'N/A',
+                'line': 0,
+                'snippet': f"'{base}' is a known malicious package (IOC match)",
+                'category': 'known-ioc'
+            })
+            continue
+        pkg_bad = compromised_versions.get(base_lower, {})
+        if not pkg_bad:
+            continue
+        # exact pin
+        if version in pkg_bad:
+            findings.append({
+                'scanner': 'auto_scan',
+                'severity': 'critical',
+                'title': f"Compromised Package Version: '{base}@{version}'",
+                'description': (
+                    f"Version {version} of '{base}' was published in supply-chain "
+                    f"campaign '{pkg_bad[version]}'. DO NOT INSTALL this version."
+                ),
+                'file': 'N/A',
+                'line': 0,
+                'snippet': f"'{base}@{version}' is a known-compromised release ({pkg_bad[version]})",
+                'category': 'known-ioc'
+            })
+            continue
+        # range / x-range / comparator spec that could resolve to a compromised
+        # version (e.g. keyv@^6.0.0 resolving to the bad 6.0.0). Conservative.
+        for bad_ver, campaign in pkg_bad.items():
+            if _spec_could_match(version, bad_ver):
+                findings.append({
+                    'scanner': 'auto_scan',
+                    'severity': 'critical',
+                    'title': f"Compromised Package Version: '{base}@{version}'",
+                    'description': (
+                        f"Version range '{version}' of '{base}' may resolve to "
+                        f"compromised {bad_ver}, published in supply-chain campaign "
+                        f"'{campaign}'. DO NOT INSTALL this version."
+                    ),
+                    'file': 'N/A',
+                    'line': 0,
+                    'snippet': f"'{base}@{version}' may resolve to compromised {bad_ver} ({campaign})",
+                    'category': 'known-ioc'
+                })
+                break
+
+    return findings
 
 
 def check_ioc_packages(package_names):
@@ -545,6 +748,9 @@ def main():
             scanned_target = ', '.join(package_names)
             ioc_findings = check_ioc_packages(package_names)
             all_findings.extend(ioc_findings)
+            # Version-pinned npm-family tokens (`name@version`) never match the
+            # name sets above, so re-check them by base name and exact version.
+            all_findings.extend(check_ioc_pinned_versions(pattern_type, package_names))
 
     # For git clone: scan the cloned directory
     if pattern_type == 'git_clone':

@@ -150,3 +150,95 @@ class TestExtractPackageNames:
         _, match = auto_scan.detect_install_command("npm install --save express")
         names = auto_scan.extract_package_names('npm_install', match)
         assert 'express' in names
+
+
+# --- split_npm_name_version / check_ioc_pinned_versions ---
+
+class TestSplitNpmNameVersion:
+    """`@` is both the scope marker and the version separator, so the split
+    must key off the LAST `@` and ignore a leading one."""
+
+    def test_plain_name_with_version(self):
+        assert auto_scan.split_npm_name_version("keyv@6.0.0") == ("keyv", "6.0.0")
+
+    def test_scoped_name_with_version(self):
+        assert auto_scan.split_npm_name_version("@scope/pkg@1.2.3") == ("@scope/pkg", "1.2.3")
+
+    def test_scoped_name_without_version(self):
+        assert auto_scan.split_npm_name_version("@scope/pkg") == ("@scope/pkg", None)
+
+    def test_bare_name(self):
+        assert auto_scan.split_npm_name_version("keyv") == ("keyv", None)
+
+    def test_trailing_at_yields_no_version(self):
+        assert auto_scan.split_npm_name_version("keyv@") == ("keyv", None)
+
+
+class TestCheckIocPinnedVersions:
+    """Pinned `name@version` tokens match no entry in the IOC name sets, so
+    check_ioc_packages() alone lets them through. Exercises the real IOC DB."""
+
+    def test_non_npm_family_pattern_skipped(self):
+        """pip/uv already strip version specifiers, so they are not re-checked."""
+        assert auto_scan.check_ioc_pinned_versions("pip_install", ["keyv@6.0.0"]) == []
+
+    def test_bare_name_ignored(self):
+        """Bare names are check_ioc_packages()' job, not this one."""
+        assert auto_scan.check_ioc_pinned_versions("npm_install", ["keyv"]) == []
+
+    def test_name_listed_package_flagged_at_any_version(self):
+        findings = auto_scan.check_ioc_pinned_versions(
+            "npm_install", ["anthropic-sdk-node@9.9.9"])
+        assert len(findings) == 1
+        assert findings[0]['severity'] == 'critical'
+        assert findings[0]['category'] == 'known-ioc'
+        assert 'anthropic-sdk-node' in findings[0]['title']
+
+    def test_compromised_version_flagged(self):
+        findings = auto_scan.check_ioc_pinned_versions("npm_install", ["keyv@6.0.0"])
+        assert len(findings) == 1
+        assert findings[0]['severity'] == 'critical'
+        assert findings[0]['category'] == 'known-ioc'
+        assert 'keyv@6.0.0' in findings[0]['title']
+
+    def test_clean_version_not_flagged(self):
+        """Precision: only the exact compromised version is flagged."""
+        assert auto_scan.check_ioc_pinned_versions("npm_install", ["keyv@6.0.1"]) == []
+
+    def test_safe_bare_package_not_flagged(self):
+        assert auto_scan.check_ioc_pinned_versions("npm_install", ["express"]) == []
+
+    def test_safe_pinned_package_not_flagged(self):
+        assert auto_scan.check_ioc_pinned_versions("npm_install", ["express@4.18.2"]) == []
+
+    def test_yarn_and_pnpm_and_bun_covered(self):
+        for ptype in ("yarn_add", "pnpm_install", "bun_install"):
+            assert auto_scan.check_ioc_pinned_versions(ptype, ["keyv@6.0.0"]), ptype
+
+
+class TestPinnedVersionHookOutput:
+    """End-to-end through the PostToolUse entrypoint: a pinned compromised
+    version must surface a CRITICAL, the neighbouring clean version must not."""
+
+    def _run_hook(self, command):
+        import json
+        import subprocess
+        script = os.path.abspath(os.path.join(SCRIPTS_DIR, 'auto_scan.py'))
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+        result = subprocess.run(
+            [sys.executable, script], input=payload,
+            capture_output=True, text=True, timeout=60,
+        )
+        return result.returncode, result.stdout
+
+    def test_compromised_pinned_version_flags_critical(self):
+        code, out = self._run_hook("npm install keyv@6.0.0")
+        assert code == 0  # PostToolUse hooks never block; they report
+        assert 'CRITICAL' in out
+        assert 'keyv@6.0.0' in out
+
+    def test_clean_pinned_version_is_clean(self):
+        code, out = self._run_hook("npm install keyv@6.0.1")
+        assert code == 0
+        assert 'CRITICAL' not in out
+        assert 'no issues found' in out

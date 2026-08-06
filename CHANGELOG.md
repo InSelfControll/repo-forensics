@@ -2,6 +2,84 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [Unreleased]
+
+### Added: keyv/cacheable August 2026 wave + 25-campaign IOC ingest
+
+- `data/compromised_versions.json` grows from 25 to 50 campaigns and from 302 to
+  5,828 pinned versions across 2,471 package entries, entirely additive. The
+  headline entry is `shai_hulud_keyv_cacheable_aug_2026` (the August 2026 keyv /
+  cacheable maintainer-token wave); the rest is a bulk ingest from the Cobenian
+  `shai-hulud-detect` inventory covering the Mini Shai-Hulud PyPI and TanStack
+  waves, the Miasma cluster, TeamPCP, and assorted RAT and typosquat campaigns.
+  Versions stay pinned rather than collapsing to package names, so a clean
+  release of a once-compromised package does not trip the scanner.
+
+### Added: Shai-Hulud family behavioral signatures
+
+- `scan_lifecycle.py` and `scan_post_incident.py` now cover the whole family
+  behaviorally rather than the v1 worm alone: v1 (`chalk` / `debug`, September
+  2025), the April-May 2026 Mini Shai-Hulud TanStack / AntV / atool dropper
+  waves, the May 2026 copycats, and "The Second Coming" fake-Bun wave with its
+  December 2025 "Golden Path" rename.
+- Lifecycle detection covers the fake-Bun preinstall dropper hook
+  (`"preinstall": "node setup_bun.js"`), the `setup_bun.js` / `bun_installer.js`
+  installers, the `bun_environment.js` / `environment_source.js` obfuscated
+  credential-harvest payloads, injected `formatter_<digits>.yml` workflows,
+  `SHA1HULUD` self-hosted-runner persistence, TruffleHog credential harvesting,
+  and the dead-man's-switch home-directory wipe that an `rm`-based rule alone
+  does not see.
+- Post-incident detection adds the family's host artifacts: the
+  `gh-token-monitor` LaunchAgent / systemd / token-cache persistence set from the
+  May 2026 TanStack wave, `kitty/cat.py`, staged TruffleHog binaries, confirmed
+  malicious payload hashes, Shai-Hulud repository and branch names, exfil-repo
+  description markers (including the character-reversed Mini beacon), and a
+  base64-encoded `data.json` at repository root.
+
+### Fixed: version-pinned `name@version` installs bypassed the IOC gate
+
+- `pre_scan.py` and `auto_scan.py` matched install tokens against IOC package-name
+  sets only, so a pinned npm-family token like `keyv@6.0.0` matched no name and
+  sailed through, which is exactly the form a real install command takes. Both
+  now split on the last `@` (never the leading scope marker, so
+  `@scope/pkg@1.2.3` resolves correctly) and re-check the base name against
+  known-malicious packages and the exact pinned version against the campaign
+  database.
+
+### Hardened: adversarial QA pass on the Shai-Hulud additions (torture gauntlet + review)
+
+- **Behavioral false-positives tightened** without losing worm detection:
+  `rm -rf $HOME/.cache` (and quoted `"$HOME"`), `node setup.mjs`, the standard CI
+  `trufflehog` install, `find /var/log | xargs shred`, `os.homedir()` + a
+  subpath `rmSync`, bare `formatter_<n>.yml`, and `if cred fail; rm ~/.cache` no
+  longer fire CRITICAL. TruffleHog *download* is now context-aware (critical in an
+  install/runtime script, suppressed in CI workflow files). Bare Bun dropper
+  filenames drop to a MEDIUM weak-signal hint.
+- **Gate bypasses closed**: version ranges that resolve to a compromised pin
+  (`keyv@^6.0.0`, `~`, `>=`, `6.x`), `v`-prefixed pins (`keyv@v6.0.0`), npm-alias
+  (`local@npm:keyv@6.0.0`), tarball/git URLs (incl. scoped `@scope/name`), and
+  boolean-flag value smuggling (`--save-exact keyv@6.0.0`) all block; real
+  dist-tags (`@latest`) still approve. Version-less alias/URL forms of a
+  name-listed package now block too.
+- **Latency**: the gate loads the IOC set once per invocation (was twice on the
+  npm path); benign non-install commands never load IOCs.
+- **IOC-cache crypto loader**: closed a verify-then-load TOCTOU (the signature is
+  now verified over the exact bytes that are parsed, from a single read); fixed a
+  restore-on-read race that could clobber a mid-refresh feed (grace-window guard);
+  hardened strip-detection against sentinel co-deletion (`.previous.sig`); fixed
+  file-descriptor and refresh-lock leak paths.
+- **Self-scan gap**: `.forensicsignore` no longer wildcard-ignores `iocs/*.json`
+  (which is not integrity-covered) — only the two known inventories by exact name,
+  so a dropped payload under `iocs/` is still scanned.
+- **Both-tree parity** is now enforced by `test_tree_parity.py`.
+
+### Tests
+
+- 113 new tests from the additions, plus the hardening pass: `test_pre_scan.py`
+  regression matrix for every closed bypass, `test_tree_parity.py`, and updated
+  crypto-loader coverage. Full suite green except the pre-existing checksum-drift
+  gate (clears on re-sign).
+
 ## [2.13.2] - 2026-08-05
 
 ### Changed: Memory-Heist context-gating (fewer false positives, no lost attacks)

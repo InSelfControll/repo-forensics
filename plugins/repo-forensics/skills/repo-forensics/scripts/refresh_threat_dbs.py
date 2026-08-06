@@ -360,11 +360,15 @@ def _worker_main():
     # all — wire the handler that was previously dead code. Windows lacks SIGALRM
     # and relies solely on the parent's subprocess timeout.
     _alarm_armed = hasattr(signal, "SIGALRM")
-    if _alarm_armed:
-        signal.signal(signal.SIGALRM, _alarm_handler)
-        signal.alarm(REFRESH_HARD_CAP_SEC)
 
     try:
+        # Arm the cap INSIDE the try so a failure while arming still hits the
+        # finally that releases the lock. Previously a raise between _acquire_lock()
+        # and this try leaked the flock until process exit, blocking every later
+        # refresh.
+        if _alarm_armed:
+            signal.signal(signal.SIGALRM, _alarm_handler)
+            signal.alarm(REFRESH_HARD_CAP_SEC)
         started = time.time()
         run_id = os.environ.get("REPO_FORENSICS_RUN_ID") or f"{int(started * 1000)}-{os.getpid()}"
         try:

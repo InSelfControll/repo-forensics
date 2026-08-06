@@ -356,7 +356,7 @@ class TestMain:
 
     def test_ioc_match_blocks(self, monkeypatch, capsys):
         """Simulate IOC match by monkeypatching check_ioc_packages."""
-        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs: ['evil-pkg'])
+        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs, iocs=None: ['evil-pkg'])
         payload = json.dumps(make_bash_payload("pip install evil-pkg"))
         code, out = self._run_main(payload, monkeypatch, capsys)
         assert code == 2
@@ -365,7 +365,7 @@ class TestMain:
 
     def test_ioc_match_blocks_uv(self, monkeypatch, capsys):
         """uv add reaches the IOC gate like pip install does."""
-        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs: ['evil-pkg'])
+        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs, iocs=None: ['evil-pkg'])
         payload = json.dumps(make_bash_payload("uv add evil-pkg"))
         code, out = self._run_main(payload, monkeypatch, capsys)
         assert code == 2
@@ -375,10 +375,111 @@ class TestMain:
     def test_ioc_match_blocks_pnpm_monorepo(self, monkeypatch, capsys):
         """A malicious package added via a monorepo form (`pnpm -r add evil`,
         `pnpm --filter web add evil`) still reaches the IOC pre-block gate."""
-        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs: ['evil-pkg'])
+        monkeypatch.setattr(pre_scan, 'check_ioc_packages', lambda pkgs, iocs=None: ['evil-pkg'])
         for cmd in ("pnpm -r add evil-pkg", "pnpm --filter web add evil-pkg"):
             payload = json.dumps(make_bash_payload(cmd))
             code, out = self._run_main(payload, monkeypatch, capsys)
             assert code == 2, cmd
             assert out["decision"] == "block"
             assert "evil-pkg" in out["reason"]
+
+
+# --- split_npm_name_version / check_ioc_pinned_versions ---
+
+class TestSplitNpmNameVersion:
+    """`@` is both the scope marker and the version separator, so the split
+    must key off the LAST `@` and ignore a leading one."""
+
+    def test_plain_name_with_version(self):
+        assert pre_scan.split_npm_name_version("keyv@6.0.0") == ("keyv", "6.0.0")
+
+    def test_scoped_name_with_version(self):
+        assert pre_scan.split_npm_name_version("@scope/pkg@1.2.3") == ("@scope/pkg", "1.2.3")
+
+    def test_scoped_name_without_version(self):
+        assert pre_scan.split_npm_name_version("@scope/pkg") == ("@scope/pkg", None)
+
+    def test_bare_name(self):
+        assert pre_scan.split_npm_name_version("keyv") == ("keyv", None)
+
+    def test_trailing_at_yields_no_version(self):
+        assert pre_scan.split_npm_name_version("keyv@") == ("keyv", None)
+
+
+class TestCheckIocPinnedVersions:
+    def test_non_npm_family_pattern_skipped(self):
+        """pip/uv already strip version specifiers, so they are not re-checked."""
+        assert pre_scan.check_ioc_pinned_versions("pip_install", ["keyv@6.0.0"]) == []
+
+    def test_bare_name_ignored(self):
+        """Bare names are check_ioc_packages()' job, not this one."""
+        assert pre_scan.check_ioc_pinned_versions("npm_install", ["keyv"]) == []
+
+    def test_compromised_version_blocked(self):
+        blocked = pre_scan.check_ioc_pinned_versions("npm_install", ["keyv@6.0.0"])
+        assert len(blocked) == 1
+        assert "keyv@6.0.0" in blocked[0]
+
+    def test_clean_version_not_blocked(self):
+        assert pre_scan.check_ioc_pinned_versions("npm_install", ["keyv@6.0.1"]) == []
+
+
+class TestPinnedVersionGate:
+    """End-to-end: `npm install <pkg>@<compromised-version>` must block while the
+    neighbouring clean version approves. Exercises the real IOC database."""
+
+    def _run_main(self, payload_str, monkeypatch, capsys):
+        monkeypatch.setattr('sys.stdin', __import__('io').StringIO(payload_str))
+        try:
+            pre_scan.main()
+        except SystemExit as e:
+            exit_code = e.code
+        else:
+            exit_code = 0
+        captured = capsys.readouterr()
+        stdout_json = json.loads(captured.out.strip()) if captured.out.strip() else {}
+        return exit_code, stdout_json
+
+    def test_compromised_pinned_version_blocks(self, monkeypatch, capsys):
+        payload = json.dumps(make_bash_payload("npm install keyv@6.0.0"))
+        code, out = self._run_main(payload, monkeypatch, capsys)
+        assert code == 2
+        assert out["decision"] == "block"
+        assert "keyv@6.0.0" in out["reason"]
+
+    def test_clean_pinned_version_approves(self, monkeypatch, capsys):
+        """Precision: only the exact compromised version blocks."""
+        payload = json.dumps(make_bash_payload("npm install keyv@6.0.1"))
+        code, out = self._run_main(payload, monkeypatch, capsys)
+        assert code == 0
+        assert out == {}
+
+    # --- Regression: bypasses found in the Shai-Hulud hardening review (KIMI K3) ---
+    @pytest.mark.parametrize("cmd", [
+        "npm install keyv@v6.0.0",       # v-prefixed exact pin (dist-tag early-return bypass)
+        "npm install keyv@=v6.0.0",      # =v-prefixed
+        "pnpm add keyv@v6.0.0",
+        "npm install keyv@^6.0.0",       # range that resolves to the compromised pin
+        "npm install keyv@~6.0.0",
+        "npm install keyv@>=5.0.0",
+        "npm install keyv@6.x",
+        "npm install foo@npm:keyv@6.0.0",  # npm alias smuggling a pinned bad version
+        "npm install foo --save-exact keyv@6.0.0",  # boolean-flag value strip
+        "npm install https://registry.npmjs.org/keyv/-/keyv-6.0.0.tgz",  # tarball URL
+    ])
+    def test_known_bypasses_now_block(self, cmd, monkeypatch, capsys):
+        code, out = self._run_main(json.dumps(make_bash_payload(cmd)), monkeypatch, capsys)
+        assert code == 2, f"{cmd!r} should block"
+        assert out.get("decision") == "block"
+
+    @pytest.mark.parametrize("cmd", [
+        "npm install keyv@6.0.1",        # clean neighbour
+        "npm install keyv@^6.0.1",       # range excludes the bad pin
+        "npm install keyv@7.0.0",        # clean major
+        "npm install keyv@latest",       # real dist-tag -> now-fixed release
+        "npm install left-pad@1.3.0",    # unrelated clean package
+    ])
+    def test_clean_installs_still_approve(self, cmd, monkeypatch, capsys):
+        code, out = self._run_main(json.dumps(make_bash_payload(cmd)), monkeypatch, capsys)
+        assert code == 0, f"{cmd!r} should approve (no over-block)"
+        assert out == {}

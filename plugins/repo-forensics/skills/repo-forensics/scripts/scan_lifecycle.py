@@ -91,6 +91,272 @@ INSTALL_SCRIPT_IOC_PATTERNS = [
     (re.compile(r'(?i)Miasma:\s*The\s*Spreading\s*Blight'), "Miasma campaign repository marker"),
 ]
 
+# "Shai-Hulud: The Second Coming" (November 24, 2025 fake-Bun npm wave) and its
+# December 28, 2025 "Golden Path" rename. Every filename and marker string below
+# is taken verbatim from the Cobenian/shai-hulud-detect reference detector and its
+# CHANGELOG (2.7.0 / 2.8.0 entries) -- no invented IOCs.
+#   check_bun_attack_files()        -> setup_bun.js, bun_installer.js,
+#                                      bun_environment.js, environment_source.js
+#   check_new_workflow_patterns()   -> actionsSecrets.json
+#   check_preinstall_bun_patterns() -> "preinstall": "node setup_bun.js"
+#   check_second_coming_repos()     -> "Sha1-Hulud: The Second Coming"
+#   check_github_actions_runner()   -> SHA1HULUD runner name
+SECOND_COMING_PATTERNS = [
+    (re.compile(r'(?i)"preinstall"\s*:\s*"node\s+(?:\./)?(setup_bun\.js|bun_installer\.js)"'),
+     'fake-Bun preinstall dropper hook ("preinstall": "node setup_bun.js")'),
+    (re.compile(r'(?i)\bactionsSecrets\.json\b'),
+     "actionsSecrets.json double-Base64 secrets-exfiltration staging file"),
+    (re.compile(r'(?i)\b(Sha1|Shai)-Hulud:\s{0,4}The\s{0,4}Second\s{0,4}Coming\b'),
+     "Second Coming GitHub dead-drop repository description marker"),
+    (re.compile(r'SHA1HULUD'),
+     "SHA1HULUD self-hosted GitHub Actions runner marker (Second Coming persistence)"),
+    # "Golden Path Variant Detection ... Detection for obfuscated exfiltration JSON
+    # files: `3nvir0nm3nt.json`, `cl0vd.json`, `c9nt3nts.json`, `pigS3cr3ts.json`"
+    # -- Cobenian/shai-hulud-detect CHANGELOG 3.1.0 (December 2025 Golden Path).
+    (re.compile(r'(?i)\b(3nvir0nm3nt|cl0vd|c9nt3nts|pigS3cr3ts)\.json\b'),
+     "Golden Path obfuscated secrets-exfiltration staging filename "
+     "(3nvir0nm3nt.json / cl0vd.json / c9nt3nts.json / pigS3cr3ts.json)"),
+    # formatter_<digits>.yml is the Second Coming injected-workflow name. Scoped to a
+    # .github/workflows/ path on the same line so it fires on the dropper
+    # (`cp payload .github/workflows/formatter_123.yml`) but NOT on a bare, benign
+    # date/PR-numbered `formatter_20260806.yml` reference elsewhere. The on-disk
+    # artifact is also caught path-scoped in scan_post_incident.py.
+    (re.compile(r'(?i)\.github[/\\]workflows[/\\][^\n]{0,40}formatter_\d{4,20}\.ya?ml\b'),
+     "Second Coming injected GitHub Actions workflow (.github/workflows/formatter_<digits>.yml)"),
+]
+
+# Bare dropper/payload FILENAMES from the Second Coming / Golden Path waves. A file
+# named setup_bun.js or bun_environment.js is a real IOC, but the name alone also
+# appears in legitimate Bun projects and in docs/blog posts about the attack, so a
+# standalone filename match is a MEDIUM weak-signal hint, not a CRITICAL detection.
+# The strong signals (preinstall dropper hook, exfil staging files, repo marker) stay
+# critical in SECOND_COMING_PATTERNS above.
+WEAK_BUN_FILENAME_HINTS = [
+    (re.compile(r'(?i)\b(?:\./)?(setup_bun|bun_installer)\.js\b'),
+     "Second Coming fake-Bun runtime installer filename (setup_bun.js / bun_installer.js)"),
+    (re.compile(r'(?i)\b(?:\./)?(bun_environment|environment_source)\.js\b'),
+     "Second Coming / Golden Path credential-harvest payload filename "
+     "(bun_environment.js / environment_source.js)"),
+]
+
+# GitHub dead-drop repository description / beacon markers used across the
+# Shai-Hulud family. Every literal is taken verbatim from the
+# Cobenian/shai-hulud-detect reference detector:
+#   check_malicious_repo_descriptions() -> "Goldox-T3chs: Only Happy Girl",
+#       "Miasma - The Spreading Blight", "Hades - The End for the Damned",
+#       "Shai-Hulud: Here We Go Again"
+#   check_mini_shai_hulud_indicators() IOC 3 -> "A Mini Shai-Hulud has Appeared",
+#       "niagA oG eW ereH :duluH-iahS", "siridar-ghola-567",
+#       "tleilaxu-ornithopter-43"
+# The worm stamps these on the public repos it creates under the victim's own
+# GitHub account, so a copy inside a package is either the worm itself or a
+# staged copy of it.
+SHAI_HULUD_REPO_MARKERS = [
+    (re.compile(r'(?i)\bA\s{0,4}Mini\s{0,4}Shai-Hulud\s{0,4}has\s{0,4}Appeared\b'),
+     'Mini Shai-Hulud exfil-repo description marker '
+     '("A Mini Shai-Hulud has Appeared", May 2026 TanStack wave)'),
+    (re.compile(r'niagA oG eW ereH :duluH-iahS'),
+     'Mini Shai-Hulud exfil-repo beacon, character-reversed '
+     '("niagA oG eW ereH :duluH-iahS", May 2026 AntV/atool wave)'),
+    (re.compile(r'(?i)\bShai-Hulud:\s{0,4}Here\s{0,4}We\s{0,4}Go\s{0,4}Again\b'),
+     'Shai-Hulud dead-drop repository description marker '
+     '("Shai-Hulud: Here We Go Again")'),
+    (re.compile(r'(?i)\bGoldox-T3chs:\s{0,4}Only\s{0,4}Happy\s{0,4}Girl\b'),
+     'Golden Path dead-drop repository description marker '
+     '("Goldox-T3chs: Only Happy Girl", December 2025)'),
+    (re.compile(r'(?i)\bHades\s{0,3}-\s{0,3}The\s{0,4}End\s{0,4}for\s{0,4}the\s{0,4}Damned\b'),
+     'Hades/Miasma PyPI-branch dead-drop repository description marker '
+     '("Hades - The End for the Damned")'),
+    (re.compile(r'(?i)\bMiasma\s{0,3}-\s{0,3}The\s{0,4}Spreading\s{0,4}Blight\b'),
+     'Miasma dead-drop repository description marker, hyphen form '
+     '("Miasma - The Spreading Blight")'),
+    (re.compile(r'(?i)\b(siridar-ghola-567|tleilaxu-ornithopter-43)\b'),
+     'Mini Shai-Hulud attacker exfil repository name '
+     '(siridar-ghola-567 / tleilaxu-ornithopter-43)'),
+]
+
+# Mini Shai-Hulud (April-May 2026 TanStack / AntV / atool waves) dropper
+# filenames and the install-hook delivery vectors that launch them.
+# Ported verbatim from check_mini_shai_hulud_indicators():
+#   IOC 1 -> router_init.js, tanstack_runner.js
+#   IOC 7 -> "github:tanstack/router#79ac49ee",
+#            "github:antvis/G2#<1916faa365|7cb42f5756|dc3d62a218>",
+#            "bun run tanstack_runner.js", '"preinstall": "bun run index.js"',
+#            "@tanstack/setup"
+MINI_SHAI_HULUD_PATTERNS = [
+    (re.compile(r'(?i)\b(router_init|tanstack_runner)\.js\b'),
+     "Mini Shai-Hulud payload filename (router_init.js / tanstack_runner.js)"),
+    (re.compile(r'(?i)"(preinstall|prepare)"\s{0,4}:\s{0,4}"bun\s{1,4}run\s{1,4}(index|tanstack_runner)\.js"'),
+     'Mini Shai-Hulud Bun dropper hook '
+     '("preinstall": "bun run index.js" / "bun run tanstack_runner.js")'),
+    (re.compile(r'(?i)\bgithub:tanstack/router#79ac49ee'),
+     "Mini Shai-Hulud malicious optionalDependencies orphan-commit ref "
+     "(github:tanstack/router#79ac49ee)"),
+    (re.compile(r'(?i)\bgithub:antvis/G2#(1916faa365|7cb42f5756|dc3d62a218)'),
+     "Mini Shai-Hulud malicious optionalDependencies orphan-commit ref "
+     "(github:antvis/G2#...)"),
+    (re.compile(r'@tanstack/setup\b'),
+     "Reference to the attacker-created fake @tanstack/setup package "
+     "(Mini Shai-Hulud, May 2026)"),
+]
+
+# Wipe-threat token description strings. The family plants these as the
+# description of the GitHub PAT its dead-man's switch monitors, so that the
+# standard incident-response action (revoke the token) is what fires the wipe.
+# Sources: check_mini_shai_hulud_indicators() IOC 2
+# ("IfYouRevokeThisTokenItWillWipeTheComputerOfTheOwner") and the
+# CHANGELOG token-nuke markers for the Miasma / Hades / LeoPlatform waves
+# ("IfYouInvalidateThisTokenItWillNukeTheComputerOfTheOwner",
+#  "IfYouYankThisTokenItWillNukeTheComputerOfTheOwnerFully",
+#  "RevokeAndItGoesKaboom").
+WIPE_THREAT_MARKERS = [
+    (re.compile(r'(?i)\bIfYou(Revoke|Invalidate|Yank)ThisTokenItWill(Wipe|Nuke)'
+                r'TheComputerOfTheOwner(Fully)?\b'),
+     "wipe-threat token description string (revoking the token triggers the wipe)"),
+    (re.compile(r'(?i)\bRevokeAndItGoesKaboom\b'),
+     "wipe-threat marker (RevokeAndItGoesKaboom)"),
+]
+
+# Dead-man's-switch daemon artefacts referenced from inside a package. Both Mini
+# Shai-Hulud waves install a polling service that wipes the host when its
+# monitored token is revoked (check_mini_shai_hulud_indicators() IOC 8:
+# gh-token-monitor.{sh,service}, com.user.gh-token-monitor.plist,
+# kitty-monitor.{sh,service}, com.user.kitty-monitor.plist,
+# ~/.local/share/kitty/cat.py).
+DEADMAN_SERVICE_PATTERNS = [
+    (re.compile(r'(?i)\b(gh-token-monitor|kitty-monitor)\.(sh|service)\b'),
+     "Mini Shai-Hulud dead-man's-switch daemon script or systemd unit "
+     "(gh-token-monitor / kitty-monitor)"),
+    (re.compile(r'(?i)\bcom\.user\.(gh-token-monitor|kitty-monitor)\.plist\b'),
+     "Mini Shai-Hulud dead-man's-switch macOS LaunchAgent plist"),
+    (re.compile(r'(?i)/kitty/cat\.py\b'),
+     "Mini Shai-Hulud dead-man's-switch payload path "
+     "(~/.local/share/kitty/cat.py)"),
+]
+
+# Secure-erase / overwrite wiper stages. Ported from check_destructive_patterns()
+# shai_hulud_wiper_regex, which upstream describes as "SPECIFIC signatures from
+# actual malware (Koi Security disclosure)":
+#   Bun.spawnSync.{1,50}(cmd.exe|bash).{1,100}(del /F|shred|cipher /W)
+#   shred.{1,30}-[nuvz].{1,50}($HOME|~/)
+#   cipher[[:space:]]*/W:.{0,30}USERPROFILE
+#   del[[:space:]]*/F[[:space:]]*/Q[[:space:]]*/S.{1,30}USERPROFILE
+#   find.{1,30}$HOME.{1,50}shred
+#   rd[[:space:]]*/S[[:space:]]*/Q.{1,30}USERPROFILE
+# These complement DEADMAN_DESTRUCT_PATTERNS (rm/del/Remove-Item/find family):
+# the wiper variants overwrite rather than unlink, so an rm-only rule misses them.
+DEADMAN_WIPER_PATTERNS = [
+    (re.compile(r'(?i)\bshred\s{1,4}-[nuvz]{1,4}\b[^\n]{0,50}(\$HOME|\$\{HOME\}|~/|/home/)'),
+     "secure-erase (shred) of files under the home directory"),
+    (re.compile(r'(?i)\bfind\s{1,4}(\$HOME|\$\{HOME\}|~)[^\n]{0,60}\bshred\b'),
+     "find-driven mass shred under the home directory"),
+    (re.compile(r'(?i)(\$HOME|\$\{HOME\}|~/|/home/)[^\n]{0,80}\bxargs\s{1,4}shred\b'),
+     "piped mass shred (xargs shred) of files under the home directory"),
+    (re.compile(r'(?i)\bcipher\s{0,4}/W:[^\n]{0,30}USERPROFILE'),
+     "Windows free-space overwrite of the user profile (cipher /W:)"),
+    (re.compile(r'(?i)\bdel\s{0,4}/F\s{0,4}/Q\s{0,4}/S\b[^\n]{0,30}USERPROFILE'),
+     "Windows recursive force-delete of the user profile (del /F /Q /S)"),
+    (re.compile(r'(?i)\brd\s{0,4}/S\s{0,4}/Q\b[^\n]{0,30}USERPROFILE'),
+     "Windows recursive directory removal of the user profile (rd /S /Q)"),
+    (re.compile(r'(?i)\bBun\.spawnSync\b[^\n]{0,60}(cmd\.exe|bash)[^\n]{0,100}'
+                r'(del\s{1,4}/F|shred|cipher\s{1,4}/W)'),
+     "Bun.spawnSync shelling out to a wiper command "
+     "(Shai-Hulud 2.0 wiper, Koi Security disclosure)"),
+]
+
+# TruffleHog download + execution. The Second Coming payload pulls the TruffleHog
+# binary at install time and runs it over the filesystem to harvest GitHub PATs,
+# npm tokens, and cloud credentials before exfiltration.
+# Ported from check_trufflehog_activity() HIGH-risk patterns (bounded to stay ReDoS-safe).
+# Strong, context-independent harvest signals: TruffleHog actually invoked against
+# the filesystem or targeting tokens. These fire everywhere (critical).
+TRUFFLEHOG_HARVEST_PATTERNS = [
+    (re.compile(r'(?i)\btrufflehog\b[^\n]{0,120}\b(filesystem|--?results|--?json|--?no-update)\b'),
+     "TruffleHog invoked against the filesystem (credential harvest)"),
+    (re.compile(r'(?i)\btrufflehog\b[^\n]{0,120}\b(NPM_TOKEN|GITHUB_TOKEN|AWS_(ACCESS|SECRET)[A-Z_]{0,20}|env)\b'),
+     "TruffleHog credential-scanning pattern targeting tokens/environment"),
+]
+
+# Bare TruffleHog binary DOWNLOAD. Suspicious inside a package install/runtime
+# script (packages have no business fetching a secret scanner), but it is ALSO
+# the canonical benign CI idiom (curl .../trufflehog.tar.gz | tar xz). So this is
+# fired at critical ONLY when the file is NOT a CI workflow (see _is_ci_workflow).
+TRUFFLEHOG_DOWNLOAD_PATTERN = re.compile(
+    r'(?i)\b(curl|wget|download|bunExecutable)\b[^\n]{0,120}trufflehog'
+)
+
+
+def _is_ci_workflow(rel_path):
+    """True for GitHub Actions / CI workflow files, where installing TruffleHog
+    (a legitimate secret scanner) is expected rather than an IOC."""
+    p = (rel_path or '').replace('\\', '/').lower()
+    return '.github/workflows/' in p or '.gitlab-ci' in p or '/.circleci/' in p
+
+# Dead-man's switch / self-destruct fallback: the install hook recursively deletes
+# the victim's home directory when credential theft or authentication fails.
+# Ported from check_destructive_patterns() basic_destructive_regex, which is scoped
+# to $HOME / ~ / /home/ targets only (upstream removed context-free globs to kill FPs).
+DEADMAN_DESTRUCT_PATTERNS = [
+    (re.compile(r'(?i)\brm\s+(?:-[a-z]{1,4}|--recursive|--force|--no-preserve-root)'
+                r'(?:\s+(?:-[a-z]{1,4}|--recursive|--force|--no-preserve-root))*\s+["\']?'
+                r'(\$HOME|\$\{HOME\}|~|/home/(?:\$\{?\w+\}?|\w+)?)'
+                r'/?["\']?(?![\w./])'),
+     "recursive delete of the home directory (rm -rf $HOME / rm -rf ~)"),
+    (re.compile(r'(?i)\bdel\s+/s\s+/q\s+(%USERPROFILE%|\$HOME)'),
+     "recursive delete of the Windows user profile (del /s /q %USERPROFILE%)"),
+    (re.compile(r'(?i)\bRemove-Item\s+-Recurse\b[^\n]{0,60}(\$HOME|\$env:USERPROFILE|~(?![a-zA-Z0-9_/]))'),
+     "PowerShell recursive delete of the home directory"),
+    (re.compile(r'(?i)\bfind\s+(\$HOME|\$\{HOME\}|~(?![a-zA-Z0-9_/])|/home/)[^\n]{0,100}(-delete\b|-exec\s+rm\b)'),
+     "find-based mass delete under the home directory"),
+]
+
+# Conditional destruction: destroy-on-auth-failure wording that upstream matches in
+# shell contexts (check_destructive_patterns shell_conditional_regex).
+DEADMAN_CONDITIONAL_PATTERNS = [
+    (re.compile(r'(?i)\bif\b[^\n]{0,80}\bcredential\w{0,6}\b[^\n]{0,80}\b(fail|error)\w{0,4}\b[^\n]{0,60}'
+                r'\brm\b[^\n]{0,50}(\$HOME/?(?![\w./])|~/?(?![\w./])|/home/\w+/?(?![\w./])'
+                r'|\.npmrc|\.ssh|\.aws|\.netrc|\.git-credentials|keychain|credentials?)'),
+     "destroy-on-credential-failure conditional targeting the home dir / credential store"),
+    (re.compile(r'(?i)\bif\b[^\n]{0,80}\btoken\b[^\n]{0,60}\bnot\s+found\b[^\n]{0,60}\b(delete|rm)\b'),
+     "destroy-on-missing-token conditional"),
+    (re.compile(r'(?i)\bif\b[^\n]{0,80}\bgithub\b[^\n]{0,60}\bauth\w{0,6}\b[^\n]{0,60}\bfail\w{0,4}\b[^\n]{0,40}\brm\b'),
+     "destroy-on-GitHub-auth-failure conditional"),
+    (re.compile(r'(?i)\bcatch\b[^\n]{0,60}\brm\s+-[a-z]{1,4}\b'),
+     "recursive delete inside an error handler (destructive fallback)"),
+]
+
+# JS form of the same dead-man's switch: resolve the home directory, then remove it
+# recursively. Reported only when BOTH halves are present in one file, matching the
+# combined-signal convention used by forensics_core's destructive-fallback rule.
+HOMEDIR_REFERENCE = re.compile(
+    r'(?i)\b(os\.homedir\s*\(\s*\)'
+    r'|require\(\s*["\']os["\']\s*\)\s*\.\s*homedir'
+    r'|process\.env\.(HOME|USERPROFILE)\b)'
+)
+# Only a delete whose FIRST argument IS the home directory itself (not a subpath
+# under it). rmSync(os.homedir(), {recursive:true}) is the dead-man's switch;
+# rmSync(path.join(home,'.cache'), {recursive:true}) is benign cache cleanup and
+# must NOT fire. The home ref must be the whole first arg (optionally a trailing
+# slash), immediately followed by the arg separator/close — never a path.join or
+# a "+ '/sub'" concatenation.
+RECURSIVE_DELETE = re.compile(
+    r'(?i)\b(fs\.promises\.rm|fs\.rmSync|fs\.rm|fs\.rmdirSync|rmSync|rmdirSync|rimraf\.sync|rimraf)\s*\(\s*'
+    r'(os\.homedir\s*\(\s*\)|process\.env\.(?:HOME|USERPROFILE)'
+    r'|home|homedir|homeDir|homeDirectory|homePath|userHome|userDir|HOME)'
+    r'\s*/?\s*[,)]'
+    # [\s\S] (not [^\n]) so prettier-formatted multiline options still match;
+    # accept the truthy shorthands recursive:!0 / recursive:1 too.
+    r'[\s\S]{0,120}recursive\s*:\s*(?:true|!0|1)\b'
+)
+
+# File types worth running the Second Coming content signatures over. Manifests,
+# JS/TS entrypoints, workflow YAML, and install shell scripts cover every observed
+# delivery surface for this campaign.
+SECOND_COMING_SCAN_EXTS = (
+    '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.json',
+    '.yml', '.yaml', '.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd', '.py',
+)
+
 RELAY_PATTERN = re.compile(
     r'^(node|python|python3|sh|bash|bun|deno)\s+[\w./-]+\.(js|mjs|cjs|py|sh)$'
 )
@@ -640,6 +906,240 @@ def scan_vscode_tasks(file_path, rel_path):
     return findings
 
 
+def scan_second_coming_indicators(file_path, rel_path):
+    """Detect "Shai-Hulud: The Second Coming" behavioral signatures.
+
+    Covers the November 2025 fake-Bun npm wave and its December 2025 "Golden Path"
+    rename: dropper/exfil artifact references, the fake-Bun preinstall hook, the
+    GitHub dead-drop repository description marker, the SHA1HULUD self-hosted
+    runner marker, TruffleHog download-and-execute credential harvesting, and the
+    dead-man's switch that wipes $HOME when credential theft fails.
+
+    Artifact names and marker strings are taken verbatim from the
+    Cobenian/shai-hulud-detect reference detector; nothing here is inferred.
+    """
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        for i, line in enumerate(content.split('\n')):
+            if len(line) > core.MAX_LINE_LENGTH:
+                continue  # MAX_LINE_LENGTH guard
+
+            for pattern, desc in SECOND_COMING_PATTERNS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Shai-Hulud Second Coming: {desc}",
+                        description=(
+                            "File references a confirmed 'Shai-Hulud: The Second "
+                            "Coming' artifact (November 2025 fake-Bun npm wave, "
+                            "1,100+ packages; December 2025 'Golden Path' rename). "
+                            "The campaign installs a fake Bun runtime, harvests "
+                            "credentials, and exfiltrates them to attacker-created "
+                            "GitHub repositories."
+                        ),
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="install-script-ioc"
+                    ))
+
+            for pattern, desc in WEAK_BUN_FILENAME_HINTS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="medium",
+                        title=f"Shai-Hulud Second Coming (weak filename hint): {desc}",
+                        description=(
+                            "File references a Second Coming / Golden Path dropper "
+                            "filename. The name alone is a weak signal (it also appears "
+                            "in legitimate Bun projects and in write-ups about the "
+                            "attack); corroborate with a preinstall hook, exfil staging "
+                            "file, or the repo marker before treating as an infection."
+                        ),
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="install-script-ioc"
+                    ))
+
+            for pattern, desc in TRUFFLEHOG_HARVEST_PATTERNS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"TruffleHog Credential Harvest: {desc}",
+                        description=(
+                            "Install/runtime script downloads or invokes TruffleHog "
+                            "to sweep the filesystem for secrets. This is the "
+                            "credential-harvesting stage of Shai-Hulud 'The Second "
+                            "Coming', used to collect GitHub PATs, npm tokens, and "
+                            "cloud keys before exfiltration."
+                        ),
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="install-script-ioc"
+                    ))
+                    break
+
+            # Bare TruffleHog download: an IOC in a package install/runtime script,
+            # but the normal way CI installs the scanner — suppress in CI workflows.
+            if not _is_ci_workflow(rel_path) and TRUFFLEHOG_DOWNLOAD_PATTERN.search(line):
+                findings.append(core.Finding(
+                    scanner=SCANNER_NAME, severity="critical",
+                    title="TruffleHog Credential Harvest: binary download in an install/runtime script",
+                    description=(
+                        "A package install or runtime script downloads the TruffleHog "
+                        "binary. Legitimate packages do not fetch a secret scanner at "
+                        "install time; this is the credential-harvest stage of "
+                        "Shai-Hulud 'The Second Coming'. (Suppressed in CI workflow "
+                        "files, where installing TruffleHog is expected.)"
+                    ),
+                    file=rel_path, line=i + 1,
+                    snippet=line.strip()[:120],
+                    category="install-script-ioc"
+                ))
+
+            for pattern, desc in DEADMAN_DESTRUCT_PATTERNS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Dead-Man's Switch: {desc}",
+                        description=(
+                            "Script recursively deletes the user's home directory. "
+                            "Shai-Hulud 'The Second Coming' fires this destructive "
+                            "fallback from its install hook when credential theft or "
+                            "GitHub authentication fails. Treat the host as "
+                            "destructive-capable and do NOT rotate the monitored "
+                            "token before neutralising the script."
+                        ),
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="destructive-fallback"
+                    ))
+                    break
+
+            for pattern, desc in DEADMAN_CONDITIONAL_PATTERNS:
+                if pattern.search(line):
+                    findings.append(core.Finding(
+                        scanner=SCANNER_NAME, severity="critical",
+                        title=f"Dead-Man's Switch: {desc}",
+                        description=(
+                            "Script deletes files on an authentication or credential "
+                            "failure path. Shai-Hulud 'The Second Coming' uses this "
+                            "destroy-on-failure fallback so a machine that cannot be "
+                            "robbed is wiped instead."
+                        ),
+                        file=rel_path, line=i + 1,
+                        snippet=line.strip()[:120],
+                        category="destructive-fallback"
+                    ))
+                    break
+
+        # File-level combined signal: home-directory resolution + recursive delete.
+        # Neither half is conclusive alone; together they are the JS dead-man's switch.
+        delete_match = RECURSIVE_DELETE.search(content)
+        if delete_match and HOMEDIR_REFERENCE.search(content):
+            line_no = content.count('\n', 0, delete_match.start()) + 1
+            findings.append(core.Finding(
+                scanner=SCANNER_NAME, severity="critical",
+                title="Dead-Man's Switch: Home Directory Resolved and Recursively Deleted",
+                description=(
+                    "File resolves the home directory (os.homedir() / process.env.HOME) "
+                    "AND performs a recursive delete (rmSync/fs.rm with recursive: true). "
+                    "Combined, this is the JavaScript form of the Shai-Hulud 'The Second "
+                    "Coming' self-destruct that wipes the host when credential "
+                    "exfiltration fails."
+                ),
+                file=rel_path, line=line_no,
+                snippet=delete_match.group(0).strip()[:120],
+                category="destructive-fallback"
+            ))
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
+def scan_shai_hulud_family_indicators(file_path, rel_path):
+    """Detect Shai-Hulud FAMILY signatures outside the Second Coming wave.
+
+    Sibling of scan_second_coming_indicators(), covering the behaviours the
+    November-2025 wave does not carry:
+
+      * GitHub dead-drop repository description / beacon markers used by the
+        v1 worm's successors (SHAI_HULUD_REPO_MARKERS).
+      * Mini Shai-Hulud (April-May 2026 TanStack / AntV / atool) dropper
+        filenames and Bun install-hook delivery (MINI_SHAI_HULUD_PATTERNS).
+      * Wipe-threat token description strings (WIPE_THREAT_MARKERS) and
+        dead-man's-switch daemon artefacts (DEADMAN_SERVICE_PATTERNS).
+      * Secure-erase wiper stages that overwrite rather than unlink
+        (DEADMAN_WIPER_PATTERNS).
+
+    Every literal is quoted from the Cobenian/shai-hulud-detect reference
+    detector or its CHANGELOG; see each pattern list for the source function.
+    """
+    findings = []
+
+    ioc_groups = (
+        (SHAI_HULUD_REPO_MARKERS, "install-script-ioc",
+         "Shai-Hulud Dead-Drop Marker",
+         "File contains a GitHub repository description or beacon string that "
+         "the Shai-Hulud worm family stamps on the public repositories it "
+         "creates under the victim's own account to exfiltrate stolen "
+         "credentials. Treat every credential reachable from this machine as "
+         "compromised."),
+        (MINI_SHAI_HULUD_PATTERNS, "install-script-ioc",
+         "Mini Shai-Hulud IOC",
+         "File references a confirmed Mini Shai-Hulud artifact (April-May 2026 "
+         "TanStack / AntV / atool npm waves). The campaign delivers an "
+         "obfuscated Bun payload through a preinstall/prepare hook or a "
+         "malicious optionalDependencies orphan-commit reference, then steals "
+         "cloud, npm, GitHub and SSH credentials."),
+        (WIPE_THREAT_MARKERS, "destructive-fallback",
+         "Dead-Man's Switch",
+         "File contains the wipe-threat string the worm plants as the "
+         "description of the GitHub token its dead-man's switch monitors. "
+         "Revoking that token is what FIRES the wipe. Stop and remove the "
+         "monitoring service BEFORE rotating any credential."),
+        (DEADMAN_SERVICE_PATTERNS, "destructive-fallback",
+         "Dead-Man's Switch",
+         "File references the Mini Shai-Hulud dead-man's-switch daemon "
+         "(gh-token-monitor / kitty-monitor). The daemon polls GitHub and wipes "
+         "the host when its monitored token is revoked. Stop and remove the "
+         "service BEFORE rotating any credential."),
+        (DEADMAN_WIPER_PATTERNS, "destructive-fallback",
+         "Dead-Man's Switch",
+         "File contains a secure-erase wiper stage (shred / cipher /W / "
+         "del /F /Q /S / rd /S /Q) targeting the user's home directory or "
+         "profile. This is the Shai-Hulud destructive fallback that runs when "
+         "credential theft fails: it overwrites rather than unlinks, so an "
+         "rm-based rule alone does not see it."),
+    )
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        for i, line in enumerate(content.split('\n')):
+            if len(line) > core.MAX_LINE_LENGTH:
+                continue  # MAX_LINE_LENGTH guard
+            for patterns, category, title_prefix, description in ioc_groups:
+                for pattern, desc in patterns:
+                    if pattern.search(line):
+                        findings.append(core.Finding(
+                            scanner=SCANNER_NAME, severity="critical",
+                            title=f"{title_prefix}: {desc}",
+                            description=description,
+                            file=rel_path, line=i + 1,
+                            snippet=line.strip()[:120],
+                            category=category
+                        ))
+                        break  # one finding per group per line
+
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"[!] Skipped {rel_path}: {e}", file=sys.stderr)
+    return findings
+
+
 def main():
     args = core.parse_common_args(sys.argv, "Lifecycle Script Scanner")
     repo_path = args.repo_path
@@ -651,6 +1151,16 @@ def main():
 
     for file_path, rel_path in core.walk_repo(repo_path, ignore_patterns, skip_binary=True, skip_lockfiles=True):
         basename = os.path.basename(file_path)
+
+        # Shai-Hulud "The Second Coming" signatures run alongside (not instead of)
+        # the per-filename dispatch below, because the campaign's markers appear in
+        # manifests, JS entrypoints, workflow YAML, and install shell scripts alike.
+        if basename == 'package.json' or file_path.endswith(SECOND_COMING_SCAN_EXTS):
+            all_findings.extend(scan_second_coming_indicators(file_path, rel_path))
+            # Remaining Shai-Hulud family waves (v1 successors, Mini waves,
+            # copycats) share the same delivery surfaces, so they run over the
+            # same file set.
+            all_findings.extend(scan_shai_hulud_family_indicators(file_path, rel_path))
 
         if basename == 'package.json':
             all_findings.extend(scan_package_json(file_path, rel_path))

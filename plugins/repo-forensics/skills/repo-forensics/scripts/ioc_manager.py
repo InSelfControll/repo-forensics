@@ -68,6 +68,12 @@ _SIG_MAX_BYTES = 256
 # considers itself degraded and emits a warning.
 _IOC_CACHE_TTL_HOURS = 24
 
+# Grace window for distinguishing an in-progress refresh (cache just written, sig
+# not yet) from a crashed/torn pair. A refresh completes both atomic renames in
+# well under a second, so any cache older than this with an invalid sig is a real
+# crash to recover; a fresher one means "a refresh is mid-flight, don't clobber it".
+_REFRESH_GRACE_SEC = 60
+
 # Shipped IOC database (version-pinned compromises). Loaded from
 # skills/repo-forensics/data/compromised_versions.json next to this script. This file ships
 # with the tool and is reviewable in git history — it is NOT cached or
@@ -360,8 +366,10 @@ def _restore_previous_signed_cache(cache_dir=None):
     if _pair_signature_state(previous_cache, previous_sig) is not True:
         return False
     try:
-        raw = open(previous_cache, "rb").read()
-        sig = open(previous_sig, "rb").read()
+        with open(previous_cache, "rb") as f:
+            raw = f.read()
+        with open(previous_sig, "rb") as f:
+            sig = f.read()
         # Keep the previous files intact until both authoritative writes finish,
         # so another crash during recovery remains recoverable.
         _atomic_write_bytes(_cache_path(cache_dir), raw, mode=0o600)
@@ -445,6 +453,87 @@ def _load_cache(cache_dir=None, ttl_hours=None):
         return data
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def _read_pair_once(cache_path, sig_path):
+    """Read the cache bytes ONCE and verify the detached signature over THOSE
+    exact bytes. Returns (raw_bytes | None, sig_state) where sig_state is
+    True (valid) / False (present but invalid or unreadable) / None (no .sig).
+
+    This is the anti-TOCTOU primitive: the caller parses the SAME `raw` bytes it
+    got back, so an attacker with write access to the cache dir cannot swap the
+    .json between a verify-open and a load-open (there is only one open of the
+    cache file)."""
+    if not os.path.exists(cache_path):
+        return None, None
+    try:
+        with open(cache_path, "rb") as f:
+            raw = f.read()
+    except OSError:
+        return None, None
+    sig_state = None
+    if os.path.isfile(sig_path):
+        try:
+            with open(sig_path, "rb") as f:
+                sig = f.read()
+        except OSError:
+            return raw, False
+        sig_state = _verify_ioc_bytes(raw, sig)
+    return raw, sig_state
+
+
+def _load_and_verify_cache(cache_dir=None, ttl_hours=None):
+    """TOCTOU-safe replacement for (_load_cache + _verify_ioc_cache_signature):
+    the bytes that are VERIFIED are the exact bytes that are PARSED, from a single
+    read. Returns (data | None, sig_state). Freshness (TTL) and the crash-recovery
+    restore-of-previous-generation are preserved from _load_cache."""
+    cache_path = _cache_path(cache_dir)
+    sig_path = _sig_cache_path(cache_dir)
+    raw, sig_state = _read_pair_once(cache_path, sig_path)
+    if raw is None:
+        return None, sig_state
+    # A present-but-invalid signature is either an IN-PROGRESS refresh (the writer
+    # writes cache then sig as two atomic renames, so there is a sub-second window
+    # of new-cache + old/absent-sig) or a genuinely CRASHED/torn pair. Distinguish
+    # by age, NOT by cache-vs-sig mtime ordering (which is always cache-newer given
+    # the write order, so an ordering test never fires for a real crash):
+    #   - fresh cache (within the grace window) -> a refresh is likely mid-flight;
+    #     do NOT restore (that would clobber the operator's just-written feed).
+    #     Degrade to hardcoded for this one read; the refresh finishes momentarily.
+    #   - old cache with a bad sig -> a crashed refresh; recover the last complete
+    #     signed generation once, then re-read+re-verify (still single-read trusted).
+    # The returned sig_state carries False through so get_iocs reports the invalid
+    # signature and REFUSES to merge the cache (its `cached and not
+    # ioc_signature_invalid` guard) — the bytes are parsed for the caller's
+    # degraded-reporting path but never trusted into the IOC set.
+    if sig_state is False:
+        try:
+            cache_age = time.time() - os.path.getmtime(cache_path)
+        except OSError:
+            cache_age = _REFRESH_GRACE_SEC + 1  # unknown age -> treat as old/eligible
+        if cache_age >= _REFRESH_GRACE_SEC and _restore_previous_signed_cache(cache_dir):
+            raw, sig_state = _read_pair_once(cache_path, sig_path)
+    if raw is None:
+        return None, sig_state
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            return None, sig_state
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, sig_state
+    # Freshness — identical policy to _load_cache (embedded _cached_at when a
+    # trustworthy value is present, else kernel mtime).
+    now = time.time()
+    cached_at = data.get("_cached_at")
+    if not isinstance(cached_at, (int, float)) or cached_at > now + 300:
+        try:
+            cached_at = os.path.getmtime(cache_path)
+        except OSError:
+            return None, sig_state
+    max_age = ttl_hours if ttl_hours is not None else _IOC_CACHE_TTL_HOURS
+    if (now - cached_at) / 3600 > max_age:
+        return None, sig_state
+    return data, sig_state
 
 
 def _save_cache(data, cache_dir=None):
@@ -613,31 +702,38 @@ def get_iocs(cache_dir=None):
         Callers should surface a warning to the user when this is True, since
         threat intelligence is limited to hardcoded fallback data only.
     """
-    cached = _load_cache(cache_dir)
+    # TOCTOU-safe load: verify the signature over the SAME bytes we parse, from a
+    # single read of the cache file (see _load_and_verify_cache). Previously the
+    # cache was opened once to parse and again to verify, letting an attacker with
+    # cache-dir write access swap the .json between the two opens (poison parsed,
+    # old-signed bytes verified).
+    cached, sig_state = _load_and_verify_cache(cache_dir)
 
     # Track whether we are operating with a fresh remote feed. When degraded,
     # callers should emit a warning: new IOCs published since the last
     # successful update will not be detected.
     ioc_degraded = cached is None
 
-    # KTD-11 verify-on-load: the detached .sig is verified over the EXACT bytes
-    # of the .json cache that get parsed below (single byte stream — no separate
-    # .raw). A cached feed whose .sig FAILS verification, OR whose .sig is MISSING
-    # on an install that has previously seen a signature, is treated as degraded
-    # (the intelligence channel may be poisoned or the .sig stripped, e.g. an
-    # attacker editing the .json or deleting a malicious domain). Hardcoded
-    # fallback IOCs still apply regardless.
-    #
-    # A sig that is simply absent on a genuinely-legacy install (one that has
-    # NEVER seen a signature) is the backward-compat path — the cache still
-    # merges. But a sig that USED to be present and is now gone must degrade.
-    sig_state = _verify_ioc_cache_signature(cache_dir) if cached else None
+    # KTD-11 verify-on-load semantics (unchanged): a cached feed whose .sig FAILS
+    # verification, OR whose .sig is MISSING on an install that has previously seen
+    # a signature, is treated as degraded (the intelligence channel may be poisoned
+    # or the .sig stripped). Hardcoded fallback IOCs still apply regardless. When
+    # there is no fresh cache at all, the signature is irrelevant (None), matching
+    # the prior `... if cached else None` behavior.
+    if cached is None:
+        sig_state = None
     if sig_state is True and not _has_seen_signed(cache_dir):
         # First valid verification on this install: arm the strip-detection
         # sentinel so a later .sig removal degrades instead of silently trusting.
         _mark_signed_seen(cache_dir)
-    sig_stripped = (sig_state is None and cached is not None
-                    and _has_seen_signed(cache_dir))
+    # Strip-detection. The sentinel alone is co-deletable by an attacker with
+    # cache-dir write access (delete .sig AND .signed-seen, drop an unsigned
+    # poisoned .json). Also treat a missing sig as stripped when a PREVIOUS signed
+    # generation (.previous.sig) exists — that is independent evidence this install
+    # has carried a signed feed, so the attacker must also delete .previous.sig.
+    signed_history = (_has_seen_signed(cache_dir)
+                      or os.path.isfile(_previous_sig_cache_path(cache_dir)))
+    sig_stripped = (sig_state is None and cached is not None and signed_history)
     ioc_signature_invalid = (sig_state is False) or sig_stripped
     if ioc_signature_invalid:
         why = ("signature MISSING (previously signed; .sig stripped)"
