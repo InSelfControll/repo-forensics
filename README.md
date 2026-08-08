@@ -619,10 +619,18 @@ Exit codes: `0` = clean, `1` = warn, `2` = block merge.
 
 ## Threat Intelligence (2025-2026)
 
+Every detector here stands on real, published security research. We credit the researchers who
+disclosed each technique, link the primary sources, and record the live threat feeds and standards
+repo-forensics builds on. The full accounting lives in **[RESEARCH-REFERENCES.md](RESEARCH-REFERENCES.md)**
+— disclosures and their researchers, CVEs, data feeds (OSV, CISA KEV, GitHub, PyPI, npm, RDAP), and
+framework mappings (OWASP, MITRE ATLAS, NIST AI RMF, CWE). Worth a read if you want to see exactly
+whose work each scanner builds on.
+
 <details>
 <summary>View research sources (2022-2026)</summary>
 
-Detection patterns are original work informed by published research:
+Detection patterns are original work informed by published research. See
+[RESEARCH-REFERENCES.md](RESEARCH-REFERENCES.md) for the complete, sourced list:
 
 | Source | Year | Finding | Scanner |
 |--------|------|---------|---------|
