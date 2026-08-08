@@ -41,18 +41,18 @@
     "scripts/ioc_manager.py": "dc881b80595abeeb6a4b7cf88df75a50534ff4a2e970a0e0d5d1be1fba6b91be",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
     "scripts/pre_scan.py": "05929c5c9404a4b99a3bc1638a7b2042639e0dc7ae216f4f346f1e0a85560d57",
-    "scripts/refresh_controller.py": "5a01c46ed2c40cb26863f9d3e3b4d726c6aaef268fadb744dea2bbf039f6f984",
+    "scripts/refresh_controller.py": "461d5ba6afe07d67aae164b3780af8b81745ca2c2f7c1ab7690a5c670345f87b",
     "scripts/refresh_threat_dbs.py": "ac2ac1ac2ee6ae57a92dbcd3d03ce0fe4c1748c0bd3f665762a6c23d92be0aa1",
     "scripts/rule_loader.py": "72500a303020ade3680fe9c4974e12d3d093873182d7a1de2a1563ebbc287ea2",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
-    "scripts/run_forensics.sh": "e68ee91d5951f7f16fc0961df90cbcd44f5e11276f4af2670700b4092a93bded",
+    "scripts/run_forensics.sh": "eb0189ccf02260de5013b322d24e557d90aa9142927802c3a1c7be88928b172f",
     "scripts/sarif_export.py": "ef6a25fe96deda21b73272e0e5bc006ac5201193e24b06e156c1c31c54f02923",
     "scripts/scan_agent_skills.py": "722e114ba23a13f2d415833de0df27748fa2b10db59a821d48c6558fbe64f420",
     "scripts/scan_archive.py": "19b4468414cedf3c676a110c273475eb3b039400d09665c1ae44914b69d0095e",
     "scripts/scan_ast.py": "34a7f1fe1769784184224f21a54a6b38eda33f8604989936bfc5b0164f483c35",
     "scripts/scan_binary.py": "b458c2d2a022ef1cc19714e4a74ec07fbac3cbfcf6aa522709ba4aee109bb1e6",
     "scripts/scan_bytecode.py": "c974f76fdfbb0375cb97fc8f81ca4efa7459116238d76f7ef2aef5f8f88df3d5",
-    "scripts/scan_dast.py": "9dde2d601e720504835959a54b627ae4cf4ced5959d855588b2486fe13ae1697",
+    "scripts/scan_dast.py": "d74ee774e45c53737ec980115cf4c2a0a9fd70bd8265c62a2070295a8ef15482",
     "scripts/scan_dataflow.py": "9944c784f5c3efe102ccf41b2f4eac24c099cc2bb48e17007fba1217bf7ad1ac",
     "scripts/scan_dead_anchors.py": "cda6d688e13fb038795040ff2a11f0126635f2e129c92c5fd5d841dc6e90ff1d",
     "scripts/scan_decode.py": "ac74bf1ec1b8ea4b1f0a8a6e840438a655c5f1b07693585a6de37c7b701023fb",
@@ -62,7 +62,7 @@
     "scripts/scan_entrypoint.py": "8a8486276449b8f3fa91a0739c6d718303458b1cda6754ebe19f03d9ec10ef10",
     "scripts/scan_git_forensics.py": "3cab0aa1144b33ab0f8ffca34e1616ef2125f9292208459f4035f09233258585",
     "scripts/scan_history.py": "c86037c0a72c0c8056c3c2acdcdbc793899df304f9222518d8c205def8dcbea3",
-    "scripts/scan_infra.py": "d19310411bccbe1c648326b45b6f5431de20898d1b59cef8fa64a91fcf980301",
+    "scripts/scan_infra.py": "9f2f13068faa35eb903c55b18f0bebc27e3ce527ea6ee82ac8c92463e5e73ca5",
     "scripts/scan_integrity.py": "82a8c7f431c8cde48aa0364f57f409dfb31535b29a2a00d185cb8cd24ffb60dd",
     "scripts/scan_lifecycle.py": "2505972084a6ee5b31ec5181a5bf136f56fabca2804e57d1b08e5f3dca0660f4",
     "scripts/scan_manifest_drift.py": "ad44edef5020c5774a169f1f65deae5a117f3f3c26a7624ec400e0d94890d517",
@@ -86,15 +86,15 @@
   },
   "symlink_count": 1,
   "repo_hooks": {
-    "hooks/ensure_refresh_daemon.sh": "6e8ad7d0126015502c1925dc4f214022744efea1a80a0a07d7f5d8cda7eccab9",
-    "hooks/first-run-nudge.sh": "75e223642d0266d7fd097a1b572775a61084245c1ba00558549930ef56776126",
+    "hooks/ensure_refresh_daemon.sh": "5468546b178a9a37f92c15a4b16b3796edcd7ad57512d4b3407e3acb8f0a30de",
+    "hooks/first-run-nudge.sh": "109fbf9e57eba0bf9c78e5f4512cd2911098201b6a5f4f0179b5521f9c697bd8",
     "hooks/hooks.json": "e209ede63b2f5be5af09cea75b5504e542ebfa0f3f798c50bbf18c1c4d6f94a4",
-    "hooks/install_refresh_daemon.sh": "9f41be0ea8df35f824a3a4ee3f766b9f34c67026ff016f601de1bdeedb216db2",
-    "hooks/python-launcher.sh": "fe1975f6d877b53e8ed37f19d62b92d4d492216ea2229147aa07771db8cbc56b",
-    "hooks/run_auto_scan.sh": "8acb8c4e6eb2a75a1c00d46a4aaca49bd75847f9f251803c89cbe24c6f10279c",
-    "hooks/run_pre_scan.sh": "fad2e9a784e0b8d7ee2ea8b1c0566e07e897e5a5a1edaf36f57747e456b68c5f",
-    "hooks/run_session_scan.sh": "72792f801bfe3f21651224e64e4eb4eb024d99a94369be26c4a05f723949b2e7",
-    "hooks/uninstall_refresh_daemon.sh": "a4e48bd32fe653818e210ad98457b9c9436c6f8a58630c3105ea4a18280a3412"
+    "hooks/install_refresh_daemon.sh": "842cba33668a69a92c6c8d4e1067c174a986b869564dbfd6a5950b527b0895a6",
+    "hooks/python-launcher.sh": "5a60aad278c301b4e7beae03d47c9cd3a9730ed608b04ea7dac1d02998acfb6f",
+    "hooks/run_auto_scan.sh": "1d404f25003e8314e371dd90cd6e3977e14ce72dd09be86a1f996963debab428",
+    "hooks/run_pre_scan.sh": "a70d320a3a941a798e09902e197b3bdf073944dd29221c4473cb1630c37d9736",
+    "hooks/run_session_scan.sh": "870b98410800210e893fe4b5f5685aac451ade11ebfbc0a94bb87def7d78d8ef",
+    "hooks/uninstall_refresh_daemon.sh": "53231685e325b25ffbfcfcd29581d69207ba82b3f3414327db50f54cc0674ded"
   },
   "hook_count": 9,
   "repo_manifests": {
@@ -102,5 +102,9 @@
     ".claude-plugin/plugin.json": "cf96894ea30b1da061ed428c7aaefefa06f32940d45968a0552903f922f5646c",
     ".codex-plugin/plugin.json": "dd3c5e9eb4359e0664fa786629b3aaa59cdd0a01a72927142db4034f3fc361ce"
   },
-  "manifest_count": 3
+  "manifest_count": 3,
+  "repo_source_manifests": {
+    ".agents/plugins/marketplace.json": "1fb6dcd1f514fe8787cf52c0d3f8982ac509b0c1e09fe70c1a0cd1590d6fb15e"
+  },
+  "source_manifest_count": 1
 }
