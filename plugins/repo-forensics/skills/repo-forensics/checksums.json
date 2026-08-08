@@ -36,7 +36,7 @@
     "scripts/dast_sandbox.sb": "6f6e9571a73aa8a9d07e7e4c5c0e6ae49fb6447c5f34a446154d301c6c4e8875",
     "scripts/dead_anchors_extract.py": "84097dd442184fc1e7339e291bc7ac47657d57a40326bd634f9b4fdfd5b97c0e",
     "scripts/dead_anchors_probe.py": "acf3cc06ba61462bcf466710a5bce88317e3519212ca27432656d785cc952d02",
-    "scripts/forensics_core.py": "fd133111a8c918c7a70eb3fa907da2260c5e7cd0226b5a0d909092dc71c92f88",
+    "scripts/forensics_core.py": "d703e22441adcf27a147ab94e4713f035f8e2cd81cf51fe7fca1047085f13093",
     "scripts/gen_rule_ids.py": "f0e743f98d7c0b8e8f317d75ec7854dd22e746f5ff98be9c88915d1236d7002c",
     "scripts/ioc_manager.py": "dc881b80595abeeb6a4b7cf88df75a50534ff4a2e970a0e0d5d1be1fba6b91be",
     "scripts/parse_pnpm_lock.py": "720f084e11cd759ab453bdfa161950111a49455ff2c6ba55ef5a9c3e32161f0c",
@@ -56,7 +56,7 @@
     "scripts/scan_dataflow.py": "9944c784f5c3efe102ccf41b2f4eac24c099cc2bb48e17007fba1217bf7ad1ac",
     "scripts/scan_dead_anchors.py": "cda6d688e13fb038795040ff2a11f0126635f2e129c92c5fd5d841dc6e90ff1d",
     "scripts/scan_decode.py": "ac74bf1ec1b8ea4b1f0a8a6e840438a655c5f1b07693585a6de37c7b701023fb",
-    "scripts/scan_dependencies.py": "565a68db3f3e1357cf6ce5f74d01a7c06c9512ece91bd22079cecd169bca14dd",
+    "scripts/scan_dependencies.py": "f78a99b93b5eddc8f259e1b6b2dcf6af10548c8912f158a4d2dc65527ba842d8",
     "scripts/scan_devcontainer.py": "066c27d4e4273a2d37ef3b989cd92735beba25fed1bd618111f3558e6d16ef7a",
     "scripts/scan_entropy.py": "2f94345394f485bb446fb5b25c257bbb98358bc62b9923b7c7dcc9dcec31ba74",
     "scripts/scan_entrypoint.py": "8a8486276449b8f3fa91a0739c6d718303458b1cda6754ebe19f03d9ec10ef10",
@@ -77,7 +77,7 @@
     "scripts/scan_splitstream.py": "95f8b56fcfd6d3900af823269e9a6e8ef1c7a0d2b417bd1936bf0f0293175a6e",
     "scripts/scan_yara.py": "d64e8ddc6bc8bddc8d7d673450db9f0a6d45dade3d5fa9f808a4e2d629107e78",
     "scripts/session_scan.py": "ebd4caa11a011a22584619fc5679e380e72ebb59657eb362bca6a1c889251c19",
-    "scripts/validate_manifests.py": "c1f4fc7e7d18c01d7b13035aef11737ddfeaebee23a0557bfaa9e6588785a3dc",
+    "scripts/validate_manifests.py": "2b2017a353b01a437f985210c4d1d2d500d698407f8206266059cb16d7ece534",
     "scripts/verify_install.py": "82fe0bddd8adead31c264f5c80b27693342a73e0b2a2afddaf195faaf4cfbe17",
     "scripts/vuln_feed.py": "0b56e20969beb8fbc59650114a34ac8743d1a0862ff3ae56b07e92d2e368a141"
   },
@@ -98,9 +98,9 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "7c7708503e9b347ec0f775cfc0150e35bf36969341d7bb40511aaed8aa6a4d6e",
-    ".claude-plugin/plugin.json": "cf96894ea30b1da061ed428c7aaefefa06f32940d45968a0552903f922f5646c",
-    ".codex-plugin/plugin.json": "dd3c5e9eb4359e0664fa786629b3aaa59cdd0a01a72927142db4034f3fc361ce"
+    ".claude-plugin/marketplace.json": "d631caf14cf8737d5eb45436ee29353ab9d87378a33491d19dcf3ea1ab2f5c9d",
+    ".claude-plugin/plugin.json": "37455b6d3d8e8f7b5498475b1f4accd00ea37c0038ffdce0db4533bb6c386488",
+    ".codex-plugin/plugin.json": "53f0d6d881fc905c8fb27e22a51c5990d3881b27da87c0b84c6b53e32ac36bfd"
   },
   "manifest_count": 3,
   "repo_source_manifests": {

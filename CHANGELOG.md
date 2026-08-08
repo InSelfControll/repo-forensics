@@ -2,7 +2,65 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [Unreleased]
+## [2.15.0] - 2026-08-08
+
+### Added: non-FHS system support (NixOS and friends)
+
+- Every interpreter and command resolution now works on systems built without
+  `/usr/bin` or `/bin` (NixOS, where coreutils and python3 live in per-user
+  Nix profiles and `/bin` holds only a `sh` symlink). Bash is resolved
+  dynamically (`$BASH` → `command -v bash` → `shutil.which`, with `/bin/bash`
+  only as a last-resort fallback) and all shebangs are `#!/usr/bin/env`.
+- The trusted-path allowlists — `python-launcher.sh` safe prefixes and
+  direct-path fallbacks, the refresh-daemon hook PATH, the `run_forensics.sh`
+  PATH floor, `refresh_controller._trusted_command`, the DAST sandboxed-env
+  PATH, and the npmrc `git=` system-path allowlist — now cover root-owned
+  NixOS roots (`/run/current-system/sw/bin`, `/run/wrappers/bin`,
+  `/nix/var/nix/profiles/default/bin`) and per-user Nix/XDG profile dirs,
+  without downgrading to blanket PATH trust.
+- `python-launcher.sh` derives HOME from `/etc/passwd` (pure bash, via
+  `$EUID`) when the hook environment strips both HOME and PATH, and its
+  interpreter probe arms the 2-second watchdog only when `sleep` actually
+  resolves — previously a missing `sleep` turned the watchdog into an
+  immediate SIGKILL of every candidate, so no interpreter was ever found.
+
+### Fixed: capability ledger worked only when PyYAML happened to be installed
+
+- `.forensics-capabilities.yml` declarations were silently ignored on hosts
+  without PyYAML (the suite is deliberately zero-dependency), so findings
+  were never annotated with `declared_capability`. A zero-dependency subset
+  parser (same trade-off as `parse_pnpm_lock.py`) now handles the documented
+  declaration shape, with PyYAML still preferred when present.
+
+### Fixed: hostile deep nesting crashed or slipped past parsers
+
+- `validate_manifests.py` reports SKILL.md frontmatter with pathologically
+  nested flow collections as a violation even without PyYAML, via a
+  dependency-free depth guard (100 levels); previously the line was silently
+  skipped on the degraded path.
+- `scan_dependencies.py` no longer abandons a recursion-bomb `package.json`:
+  it flags the adversarial structure, then retries the parse under a
+  bounded, temporarily raised recursion limit (hard cap 10,000 levels) so
+  IOC and compromised-version checks still run for that file.
+
+### Fixed: DAST sandboxing and detection on non-macOS hosts
+
+- The bubblewrap sandbox re-binds hooks that live under `/tmp` into its
+  private tmpfs — previously every `/tmp`-hosted hook (test harnesses, OS
+  temp dirs) failed to execute inside the sandbox, silently disabling DAST.
+- The path-traversal verdict no longer false-positives on the interpreter's
+  own resolved path: indicators match `/etc/passwd` line shapes
+  (`:/bin/bash`, `nobody:`) instead of bare substrings, and `sandbox-exec`
+  is resolved dynamically.
+
+### Fixed: deterministic budget-starvation naming
+
+- `walk_aux` now walks directories and files in sorted order. Which archive
+  a fan-out decoy starves no longer depends on filesystem `readdir` order,
+  so the fail-loud `archive-scan-incomplete` finding names the same file on
+  every host.
+
+## [2.14.0] - 2026-08-07
 
 ### Added: keyv/cacheable August 2026 wave + 25-campaign IOC ingest
 
