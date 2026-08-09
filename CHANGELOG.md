@@ -2,6 +2,31 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
+## [2.16.0] - 2026-08-09
+
+### Added: Kimi Code plugin support
+
+- New `.kimi-plugin/plugin.json` manifest makes the suite installable in Kimi
+  Code straight from GitHub (`/plugins install <url>`), with the same three
+  hooks as the Claude Code and Codex integrations — PreToolUse (IOC gate),
+  PostToolUse (auto-scan), SessionStart (security scan) — declared inline in
+  Kimi's hook format.
+- All hook wrappers now fall back to `KIMI_PLUGIN_ROOT` when
+  `CLAUDE_PLUGIN_ROOT` is unset, and `first-run-nudge.sh` detects Kimi
+  managed installs (`plugins/managed/`) with its own update instructions.
+- `pre_scan.py` prints the block reason to stderr in addition to the stdout
+  JSON decision, so Kimi Code (exit 2 + stderr reason) surfaces why a
+  command was blocked, not just that it was.
+- `verify_install.py` integrity tracking now covers `.kimi-plugin` manifests,
+  and the Codex marketplace sync mirrors the new manifest directory.
+
+### Fixed: SARIF tool version drifted from the release version
+
+- `sarif_export.py` hardcoded `TOOL_VERSION`, which went stale at both the
+  2.15.0 and 2.16.0 bumps. It is now resolved from the plugin manifests at
+  import time (with a literal fallback for standalone use), so the SARIF
+  `version`/`semanticVersion` can never drift again.
+
 ## [2.15.0] - 2026-08-08
 
 ### Added: non-FHS system support (NixOS and friends)
