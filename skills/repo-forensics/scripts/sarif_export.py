@@ -21,8 +21,8 @@ import urllib.parse
 from pathlib import Path
 
 # Resolved from the plugin manifests at import time so the SARIF tool version
-# can never drift from the release version again (it went stale at 2.15.0 and
-# 2.16.0 while hardcoded). The manifests sit three levels above this file in
+# can never drift from the release version again (it went stale at 2.14.1 and
+# 2.14.2 while hardcoded). The manifests sit three levels above this file in
 # both the source checkout and installed plugin layouts. The literal fallback
 # keeps standalone use (skill copied without manifests) working; it is pinned
 # to .claude-plugin/plugin.json by test_sarif_export.
@@ -38,7 +38,7 @@ def _resolve_tool_version():
                     return version
         except (OSError, ValueError, KeyError):
             continue
-    return "2.16.0"
+    return "2.14.2"
 
 
 TOOL_VERSION = _resolve_tool_version()

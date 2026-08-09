@@ -2,7 +2,7 @@
 
 All notable changes to repo-forensics. Versions follow semver.
 
-## [2.16.0] - 2026-08-09
+## [2.14.2] - 2026-08-09
 
 ### Added: Kimi Code plugin support
 
@@ -23,11 +23,11 @@ All notable changes to repo-forensics. Versions follow semver.
 ### Fixed: SARIF tool version drifted from the release version
 
 - `sarif_export.py` hardcoded `TOOL_VERSION`, which went stale at both the
-  2.15.0 and 2.16.0 bumps. It is now resolved from the plugin manifests at
+  2.14.1 and 2.14.2 bumps. It is now resolved from the plugin manifests at
   import time (with a literal fallback for standalone use), so the SARIF
   `version`/`semanticVersion` can never drift again.
 
-## [2.15.0] - 2026-08-08
+## [2.14.1] - 2026-08-08
 
 ### Added: non-FHS system support (NixOS and friends)
 

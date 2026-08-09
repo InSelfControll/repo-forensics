@@ -46,7 +46,7 @@
     "scripts/rule_loader.py": "72500a303020ade3680fe9c4974e12d3d093873182d7a1de2a1563ebbc287ea2",
     "scripts/rulepack_feed.py": "f63781e4c909257c97c4dadf0018621c6f5455096bd51ae7be8eee106b8f66be",
     "scripts/run_forensics.sh": "eb0189ccf02260de5013b322d24e557d90aa9142927802c3a1c7be88928b172f",
-    "scripts/sarif_export.py": "f8b931abe32ac4b504b14a6aa8e7c5dd3fe58a40c7f94299541df4963cd89c72",
+    "scripts/sarif_export.py": "d2339ff2c9ce03942692270bb5a053a7cef98d97fadcf48674effdbdeabbf8e7",
     "scripts/scan_agent_skills.py": "722e114ba23a13f2d415833de0df27748fa2b10db59a821d48c6558fbe64f420",
     "scripts/scan_archive.py": "19b4468414cedf3c676a110c273475eb3b039400d09665c1ae44914b69d0095e",
     "scripts/scan_ast.py": "34a7f1fe1769784184224f21a54a6b38eda33f8604989936bfc5b0164f483c35",
@@ -98,10 +98,10 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "12067ac1061efe40b247a20e1bc78e960f6093b31945b7107650f1ae0f15cb6f",
-    ".claude-plugin/plugin.json": "16c72a4f6318b6263915646329cdf3cdd3946b6fb6dcaea943adc1c7f750ff5e",
-    ".codex-plugin/plugin.json": "b79367d24692d1b93c1c11dcd54338fa2aaca0ffbd8fa3e682a88392fe54c623",
-    ".kimi-plugin/plugin.json": "65ca0c84480698b61f3c8519e7606cd3f58e8bfff2ea7d0593bc669af8013e66"
+    ".claude-plugin/marketplace.json": "66d55cbd2360abd5654d80ce8a17bd07496ba9b02550dbc16f7fb26a496b1d65",
+    ".claude-plugin/plugin.json": "aea48a347146d4553b968d51f63540c0a81a8bc7b456f928d4ed9a0c040b5b3a",
+    ".codex-plugin/plugin.json": "e9f6fa34fbaa4a69173277ed2a67c56c0a206b27296131662d9808f6f70571db",
+    ".kimi-plugin/plugin.json": "94fa16af8e067f8e79936d93bf7a6fc4f3dbb11787dc98892622d2bc0f874103"
   },
   "manifest_count": 4,
   "repo_source_manifests": {
