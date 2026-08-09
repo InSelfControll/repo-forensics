@@ -29,6 +29,7 @@ Audit untrusted repos before they touch your agent. Fully local, self-updating d
   <img src="https://img.shields.io/badge/Claude%20Code-auto--scan-5436DA.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" alt="Claude Code">
   <img src="https://img.shields.io/badge/Codex%20CLI-auto--scan-10A37F.svg" alt="Codex CLI">
   <img src="https://img.shields.io/badge/Kimi%20Code-auto--scan-1E88E5.svg" alt="Kimi Code">
+  <img src="https://img.shields.io/badge/Hermes-skill-7C3AED.svg" alt="Hermes">
   <img src="https://img.shields.io/badge/OpenClaw-supported-FF6B35.svg" alt="OpenClaw">
   <img src="https://img.shields.io/badge/Cursor-supported-00D1FF.svg" alt="Cursor">
   <img src="https://img.shields.io/badge/NanoClaw-supported-8B5CF6.svg" alt="NanoClaw">
@@ -109,6 +110,21 @@ python3 scripts/openclaw_install.py
 
 This adds PreToolUse, PostToolUse, and SessionStart hooks to `~/.openclaw/openclaw.json`. Uninstall with `--uninstall`.
 OpenClaw 2026.6.1+ operator install policy is supported; the installer preserves `security.installPolicy`, does not use unsafe force-install flags, and can be checked with `python3 scripts/openclaw_install.py --verify`.
+
+</details>
+
+<details>
+<summary><b>Hermes</b> (manual skill install)</summary>
+
+Hermes natively speaks the agentskills.io SKILL.md standard — drop the skill into its user-skills directory:
+
+```bash
+git clone https://github.com/alexgreensh/repo-forensics.git
+ln -s "$(pwd)/repo-forensics/skills/repo-forensics" ~/.hermes/skills/repo-forensics
+hermes skills list   # shows repo-forensics as local + enabled
+```
+
+Note: hub installs (`hermes skills install <github-id>`) are currently blocked by Hermes's own skills-guard with a "dangerous" verdict — by design it hard-blocks any community skill whose files reference agent config files or contain prompt-injection strings, and a security scanner's detection logic necessarily does both. The skill ships a `.skillignore` so its detection-signature data and adversarial test fixtures don't count as findings; the remaining matches are the read-only audit logic itself. Hooks are not auto-wired by the skill system; use `/repo-forensics <path>` or ask the agent to audit a repo before installing it.
 
 </details>
 
@@ -200,6 +216,7 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 | Claude Code | Plugin install auto-registers all 3 hooks | None needed |
 | Codex CLI | Plugin install auto-registers all 3 hooks | Local checkout: `python3 scripts/codex_install.py` |
 | Kimi Code | Plugin install auto-registers all 3 hooks | None needed |
+| Hermes | Skill install (no hook wiring) | Symlink into `~/.hermes/skills/` — hub installs blocked by skills-guard, see Install |
 | OpenClaw | Not auto-wired by plugin system | One-time: `python3 scripts/openclaw_install.py` |
 | Cursor / NanoClaw / CLI | N/A (no plugin hook system) | Use manual `/repo-forensics` invocation |
 
@@ -577,7 +594,7 @@ Forensify is read-only. It doesn't fix, patch, or quarantine anything. It doesn'
 Works as a skill in any AI coding agent. Install once, then ask: *"Audit this repo before I add it as a dependency"*
 
 <details>
-<summary>Setup for Claude Code, Codex, OpenClaw, Cursor</summary>
+<summary>Setup for Claude Code, Codex, OpenClaw, Cursor, Hermes</summary>
 
 **Claude Code:**
 ```bash
@@ -585,6 +602,12 @@ ln -s $(pwd)/repo-forensics/skills/repo-forensics ~/.claude/skills/repo-forensic
 ```
 
 **Codex / OpenClaw / NanoClaw / Cursor:** Point your agent's skill directory at the `skills/repo-forensics/` folder.
+
+**Hermes (Nous Research):** Native [agentskills.io](https://agentskills.io) support — symlink the skill into the user-skills directory:
+```bash
+ln -s "$(pwd)/repo-forensics/skills/repo-forensics" ~/.hermes/skills/repo-forensics
+```
+(Hub installs via `hermes skills install <github-id>` are blocked by Hermes's skills-guard — a security scanner's detection signatures trip its "dangerous" verdict by design. See the Hermes install section above.)
 
 Then just ask your agent:
 

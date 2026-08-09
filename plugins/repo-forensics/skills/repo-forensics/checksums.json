@@ -1,10 +1,11 @@
 {
   "version": "2",
   "generator": "repo-forensics/verify_install",
-  "file_count": 77,
+  "file_count": 78,
   "files": {
     ".gitignore": "8b2598a3359a556874b8069d42dea2686f07d46c3ca1b540c4025788b258180a",
-    "SKILL.md": "dbe9b69efac035e1a898a809c50ac20d3258e50ea51735c6f39d50cb8eee0132",
+    ".skillignore": "779a6b654692693c87d40da4192b8ee29a3379064b5a72a9e677cbccaf7c12ec",
+    "SKILL.md": "3300a24e4b471defbf780143a006b672ddf32f9bdd6ea69794181426f2f6764e",
     "data/README.md": "3980ad873dbef332e0db2d209cd22287d8a0d146930b40bafc8ab774166a8bc4",
     "data/compromised_versions.json": "02859341a1a5733506c4ad5c1f3afcb8debd0c902713867a4f8cb1e29df06a4f",
     "data/rule_ids.csv": "365fde4524585d73bd0e56758da97867f74bdeb23139ee1f62f7c550118de60a",
@@ -98,10 +99,10 @@
   },
   "hook_count": 9,
   "repo_manifests": {
-    ".claude-plugin/marketplace.json": "66d55cbd2360abd5654d80ce8a17bd07496ba9b02550dbc16f7fb26a496b1d65",
-    ".claude-plugin/plugin.json": "aea48a347146d4553b968d51f63540c0a81a8bc7b456f928d4ed9a0c040b5b3a",
-    ".codex-plugin/plugin.json": "e9f6fa34fbaa4a69173277ed2a67c56c0a206b27296131662d9808f6f70571db",
-    ".kimi-plugin/plugin.json": "94fa16af8e067f8e79936d93bf7a6fc4f3dbb11787dc98892622d2bc0f874103"
+    ".claude-plugin/marketplace.json": "52d6d07e89cd5656614864518af82bf12904b3016ef9d5a284a6f843784f98a6",
+    ".claude-plugin/plugin.json": "85dc31d05284f3ef7c5383efbdb88aa920e38f7639fb8777b6d781105274ff1a",
+    ".codex-plugin/plugin.json": "b3d65fdb710421f4fb585dd8e175a94618d7e5d99d781765e80e19705ede40c4",
+    ".kimi-plugin/plugin.json": "85fa8634c6142a3388145dcb91f6f5a915bb2161ee2779244f0a94f951651d66"
   },
   "manifest_count": 4,
   "repo_source_manifests": {
