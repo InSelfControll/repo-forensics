@@ -1,0 +1,14 @@
+# Scanner guard exclusions (Hermes skills-guard, ClawHub install scans).
+#
+# The paths below are *inputs to the scanners*, not executable behavior:
+# detection-signature data (attack strings, IOCs, malicious-version pins) and
+# adversarial test fixtures (intentional prompt-injection and exfiltration
+# samples). Shipping them is the product — but naive content scans flag the
+# signatures as if they were live behavior. Excluding them from install-time
+# guards does not remove them from the installed payload; the scanners still
+# load them at runtime.
+data/
+tests/
+references/
+.pytest_cache/
+__pycache__/
