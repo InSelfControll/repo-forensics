@@ -26,11 +26,12 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 if [ -f "$LAUNCHER" ]; then
-    if [ -n "${KIMI_PLUGIN_ROOT:-}" ] && [ -f "$JSON_WRAP" ]; then
-        # Kimi Code requires SessionStart stdout to be a JSON envelope;
-        # plain text fails with "invalid session start JSON output". Pipe
-        # stdout through the envelope wrapper instead of exec'ing raw
-        # (stderr stays stderr).
+    if [ -f "$JSON_WRAP" ]; then
+        # SessionStart stdout must be a JSON envelope on Kimi Code and Codex
+        # ("invalid session start JSON output" on plain text); the
+        # hookSpecificOutput envelope is also the documented additionalContext
+        # contract on Claude Code, so always wrap instead of host-sniffing.
+        # stderr stays stderr; empty output stays silent.
         "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$SCRIPT" \
             | "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$JSON_WRAP"
         exit 0
@@ -38,7 +39,7 @@ if [ -f "$LAUNCHER" ]; then
     exec "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$SCRIPT"
 fi
 
-if [ -n "${KIMI_PLUGIN_ROOT:-}" ] && [ -f "$JSON_WRAP" ]; then
+if [ -f "$JSON_WRAP" ]; then
     python3 "$SCRIPT" | python3 "$JSON_WRAP"
     exit 0
 fi

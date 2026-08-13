@@ -20,14 +20,14 @@
 SCRIPT_DIR="$(dirname "$0")"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Kimi Code requires SessionStart hook stdout to be a JSON envelope; plain
-# text fails with "invalid session start JSON output". On Kimi, re-run this
-# script once with stdout piped through the envelope wrapper (stderr stays
-# stderr). The flag prevents infinite recursion on the second pass.
+# SessionStart hook stdout must be a JSON envelope on Kimi Code and Codex
+# ("hook returned invalid session start JSON output" on plain text), and the
+# hookSpecificOutput envelope is the documented additionalContext contract on
+# Claude Code — so always route stdout through the wrapper instead of
+# host-sniffing. stderr stays stderr, and empty output stays silent.
 LAUNCHER="$PLUGIN_ROOT/hooks/python-launcher.sh"
 JSON_WRAP="$PLUGIN_ROOT/hooks/session_json_wrap.py"
-if [ -z "${_RF_NUDGE_WRAPPED:-}" ] && [ -n "${KIMI_PLUGIN_ROOT:-}" ] \
-    && [ -f "$LAUNCHER" ] && [ -f "$JSON_WRAP" ]; then
+if [ -z "${_RF_NUDGE_WRAPPED:-}" ] && [ -f "$LAUNCHER" ] && [ -f "$JSON_WRAP" ]; then
     _RF_NUDGE_WRAPPED=1 "$0" \
         | "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$JSON_WRAP" || true
     exit 0
