@@ -47,7 +47,11 @@ All notable changes to repo-forensics. Versions follow semver.
   plain-text SessionStart output ("hook returned invalid session start JSON
   output"), and the envelope is the documented context contract on Claude
   Code, so no host sniffing is needed. Verified end-to-end under `codex
-  exec` and a simulated Kimi hook environment.
+  exec` (both SessionStart hooks report Completed), `claude -p` (envelope
+  accepted, no hook errors), and a simulated Kimi hook environment (valid
+  JSON). OpenClaw's hook system is Claude Code-compatible, so the same
+  contract applies; Cursor, NanoClaw, and Hermes wire no hooks through this
+  mechanism and are unaffected.
 
 ### Fixed: SARIF tool version drifted from the release version
 

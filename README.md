@@ -220,6 +220,18 @@ Once installed as a plugin, repo-forensics runs automatically in the background.
 | OpenClaw | Not auto-wired by plugin system | One-time: `python3 scripts/openclaw_install.py` |
 | Cursor / NanoClaw / CLI | N/A (no plugin hook system) | Use manual `/repo-forensics` invocation |
 
+**SessionStart output contract (all hook-wired agents):** SessionStart hooks
+emit the `hookSpecificOutput` / `additionalContext` JSON envelope on every
+host, via `hooks/session_json_wrap.py`. Kimi Code and Codex reject plain-text
+SessionStart output ("hook returned invalid session start JSON output"),
+Claude Code documents the envelope as its context-injection contract, and
+OpenClaw's hook system is Claude Code-compatible — so one code path serves
+all four hook-wired agents with no host sniffing. Verified end-to-end under
+`codex exec` (both hooks report Completed), `claude -p` (envelope accepted,
+no hook errors), and a simulated Kimi hook environment (valid JSON envelope).
+Cursor, NanoClaw, and Hermes wire no hooks through this mechanism, so the
+contract does not apply to them.
+
 Claude Code v2.1.160+ may ask for an extra acceptEdits confirmation before writing package-manager and dev-environment config files such as `.npmrc`, `.yarnrc*`, `bunfig.toml`, `.bazelrc`, `.pre-commit-config.yaml`, and `.devcontainer/`. Repo Forensics scans these files normally; the extra prompt is Claude Code's own write-safety layer.
 
 Threat-feed refresh is self-healing after hook trust. SessionStart promotes an
