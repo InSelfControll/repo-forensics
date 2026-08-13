@@ -42,6 +42,10 @@ All notable changes to repo-forensics. Versions follow semver.
   command was blocked, not just that it was.
 - `verify_install.py` integrity tracking now covers `.kimi-plugin` manifests,
   and the Codex marketplace sync mirrors the new manifest directory.
+- SessionStart hooks emit the `hookSpecificOutput`/`additionalContext` JSON
+  envelope Kimi Code requires (`hooks/session_json_wrap.py`, applied when
+  `KIMI_PLUGIN_ROOT` is set); plain-text output failed with "hook returned
+  invalid session start JSON output".
 
 ### Fixed: SARIF tool version drifted from the release version
 
