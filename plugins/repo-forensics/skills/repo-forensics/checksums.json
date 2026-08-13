@@ -88,16 +88,17 @@
   "symlink_count": 1,
   "repo_hooks": {
     "hooks/ensure_refresh_daemon.sh": "e4a3a1206fb298bbbf3faacc43f4c312d97a001c38f8e104a0812cb99c11403b",
-    "hooks/first-run-nudge.sh": "74d7c0fccded0e19d9f5f965f0bdfdd42340ecc87d0a30c7d92cda4cd96575e8",
+    "hooks/first-run-nudge.sh": "4e47faf29e78fb0d56be6e545b8fb7312653a0507225e60e7e48c161d9c726dd",
     "hooks/hooks.json": "e209ede63b2f5be5af09cea75b5504e542ebfa0f3f798c50bbf18c1c4d6f94a4",
     "hooks/install_refresh_daemon.sh": "d358a36410f003197152fb70dd398ddcfda4c0e6c085e5a9ff203e09fddeb4b4",
     "hooks/python-launcher.sh": "5a60aad278c301b4e7beae03d47c9cd3a9730ed608b04ea7dac1d02998acfb6f",
     "hooks/run_auto_scan.sh": "aab1bd98081c02afa9916b8018f0e5671dafb410db4e57bb4427ea9e589a13b0",
     "hooks/run_pre_scan.sh": "0b777d226a1f41d645b4027527d6d85563b19ba144ba7b348a3dad87a189f4b4",
-    "hooks/run_session_scan.sh": "d3058fbbcb762c1c18739e11d36eebea064d2fcafda6d65dc8fcbaa08c9b2ca3",
+    "hooks/run_session_scan.sh": "1baa526e3178546eb9ca8a49fabe464ad14951fcbfa664a52abb272ac8331fe0",
+    "hooks/session_json_wrap.py": "15384f67582187a4d57683e9c4a3a160a2638c46a6a423606ff781d2e7fccca2",
     "hooks/uninstall_refresh_daemon.sh": "6b384852872d5b60154eea8b16f2be3f3e7f1b939a5f0d34825b4b5dfb753929"
   },
-  "hook_count": 9,
+  "hook_count": 10,
   "repo_manifests": {
     ".claude-plugin/marketplace.json": "52d6d07e89cd5656614864518af82bf12904b3016ef9d5a284a6f843784f98a6",
     ".claude-plugin/plugin.json": "85dc31d05284f3ef7c5383efbdb88aa920e38f7639fb8777b6d781105274ff1a",

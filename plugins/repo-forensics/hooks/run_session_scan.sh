@@ -11,6 +11,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${KIMI_PLUGIN_ROOT:-}}"
 SCRIPT="$PLUGIN_ROOT/skills/repo-forensics/scripts/session_scan.py"
 LAUNCHER="$PLUGIN_ROOT/hooks/python-launcher.sh"
 ENSURE_REFRESH="$PLUGIN_ROOT/hooks/ensure_refresh_daemon.sh"
+JSON_WRAP="$PLUGIN_ROOT/hooks/session_json_wrap.py"
 
 # Bootstrap or repair the background updater before checking freshness. This
 # stays silent and never blocks SessionStart if the platform scheduler fails.
@@ -25,7 +26,21 @@ if [ ! -f "$SCRIPT" ]; then
 fi
 
 if [ -f "$LAUNCHER" ]; then
+    if [ -n "${KIMI_PLUGIN_ROOT:-}" ] && [ -f "$JSON_WRAP" ]; then
+        # Kimi Code requires SessionStart stdout to be a JSON envelope;
+        # plain text fails with "invalid session start JSON output". Pipe
+        # stdout through the envelope wrapper instead of exec'ing raw
+        # (stderr stays stderr).
+        "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$SCRIPT" \
+            | "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$JSON_WRAP"
+        exit 0
+    fi
     exec "${BASH:-$(command -v bash || echo /bin/bash)}" "$LAUNCHER" "$SCRIPT"
+fi
+
+if [ -n "${KIMI_PLUGIN_ROOT:-}" ] && [ -f "$JSON_WRAP" ]; then
+    python3 "$SCRIPT" | python3 "$JSON_WRAP"
+    exit 0
 fi
 
 exec python3 "$SCRIPT"
